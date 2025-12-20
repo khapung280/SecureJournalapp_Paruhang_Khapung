@@ -1,0 +1,30 @@
+﻿@page "/setup"
+
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+
+@inject AuthDbService Db
+@inject SecurityService SecurityService
+@inject NavigationManager Nav
+
+<h3>Create PIN</h3>
+
+<input type="password" @bind="pin" placeholder="Create PIN" />
+<br />
+<button @onclick="Save">Save PIN</button>
+
+@code {
+    string pin = "";
+
+    async Task Save()
+    {
+        var user = new User
+        {
+            PinHash = SecurityService.HashPin(pin),
+            CreatedAt = DateTime.Now
+        };
+
+        await Db.SaveUserAsync(user);
+        Nav.NavigateTo("/login", replace: true);
+    }
+}

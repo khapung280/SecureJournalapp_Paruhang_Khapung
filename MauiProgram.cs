@@ -8,6 +8,7 @@ namespace SecureJournalapp_Paruhang_Khapung
         public static MauiApp CreateMauiApp()
         {
             var builder = MauiApp.CreateBuilder();
+
             builder
                 .UseMauiApp<App>()
                 .ConfigureFonts(fonts =>
@@ -15,10 +16,13 @@ namespace SecureJournalapp_Paruhang_Khapung
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                 });
 
+            // ✅ Required for Blazor MAUI
             builder.Services.AddMauiBlazorWebView();
 
-            // ✅ Theme service added here
+            // ✅ REGISTER ALL SERVICES (MANDATORY)
             builder.Services.AddSingleton<ThemeService>();
+            builder.Services.AddSingleton<AuthDbService>();
+            builder.Services.AddSingleton<SecurityService>();
 
 #if DEBUG
             builder.Services.AddBlazorWebViewDeveloperTools();

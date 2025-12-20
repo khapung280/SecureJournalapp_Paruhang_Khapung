@@ -72,3 +72,147 @@ main p {
     background-color: #1e1e1e;
     box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
 }
+
+.home-card {
+    max-width: 520px;
+    margin: 60px auto;
+    text-align: center;
+    padding: 30px;
+}
+
+.title {
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    font-size: 1rem;
+    opacity: 0.85;
+    margin-bottom: 25px;
+}
+
+.home-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.primary-btn {
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 1rem;
+    background: linear-gradient(135deg, #4f46e5, #6366f1);
+    color: white;
+    cursor: pointer;
+}
+
+.secondary-btn {
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: 1px solid #888;
+    font-size: 1rem;
+    background: transparent;
+    cursor: pointer;
+}
+
+    .primary-btn:hover,
+    .secondary-btn:hover {
+        transform: scale(1.03);
+    }
+
+.footer-text {
+    font-size: 0.85rem;
+    opacity: 0.7;
+}
+/* ===== LOGIN PAGE ===== */
+
+.login-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 80vh;
+}
+
+.login-card {
+    width: 380px;
+    padding: 30px;
+    border-radius: 14px;
+    background: var(--card-bg, #ffffff);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    text-align: center;
+}
+
+.login-header h2 {
+    margin: 10px 0 5px;
+}
+
+.login-header p {
+    font-size: 0.9rem;
+    color: gray;
+}
+
+.login-body {
+    margin-top: 20px;
+}
+
+.pin-input {
+    width: 100%;
+    padding: 14px;
+    font-size: 1.2rem;
+    text-align: center;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    letter-spacing: 6px;
+    outline: none;
+}
+
+    .pin-input:focus {
+        border-color: #6c63ff;
+        box-shadow: 0 0 0 2px rgba(108,99,255,0.2);
+    }
+
+.unlock-btn {
+    width: 100%;
+    margin-top: 15px;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    font-size: 1rem;
+    background: linear-gradient(135deg, #6c63ff, #8b84ff);
+    color: white;
+    cursor: pointer;
+}
+
+    .unlock-btn:hover {
+        opacity: 0.95;
+    }
+
+.error-box {
+    margin-top: 12px;
+    padding: 8px;
+    border-radius: 8px;
+    background: #ffe6e6;
+    color: #b00020;
+    font-size: 0.9rem;
+}
+
+.login-footer {
+    margin-top: 18px;
+    font-size: 0.8rem;
+    color: gray;
+}
+
+.reset-btn {
+    margin-top: 12px;
+    background: transparent;
+    border: none;
+    color: #6c63ff;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+    .reset-btn:hover {
+        text-decoration: underline;
+    }
