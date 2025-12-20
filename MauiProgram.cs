@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using SecureJournalapp_Paruhang_Khapung.Services;
 
 namespace SecureJournalapp_Paruhang_Khapung
 {
@@ -16,9 +17,12 @@ namespace SecureJournalapp_Paruhang_Khapung
 
             builder.Services.AddMauiBlazorWebView();
 
+            // ✅ Theme service added here
+            builder.Services.AddSingleton<ThemeService>();
+
 #if DEBUG
-    		builder.Services.AddBlazorWebViewDeveloperTools();
-    		builder.Logging.AddDebug();
+            builder.Services.AddBlazorWebViewDeveloperTools();
+            builder.Logging.AddDebug();
 #endif
 
             return builder.Build();
