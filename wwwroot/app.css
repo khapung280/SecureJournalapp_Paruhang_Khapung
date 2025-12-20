@@ -1,25 +1,74 @@
-/* Light mode (default) */
-body.light {
-    background-color: white;
-    color: black;
-    font-family: Arial, sans-serif;
+/* ===== Base layout ===== */
+.layout {
+    min-height: 100vh;
+    font-family: "Segoe UI", Arial, sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Dark mode */
-body.dark {
-    background-color: #121212;
-    color: white;
+/* ===== Light Theme ===== */
+.layout {
+    background-color: #f9f9f9;
+    color: #1e1e1e;
 }
 
-/* Buttons */
+    /* ===== Dark Theme ===== */
+    .layout.dark {
+        background-color: #121212;
+        color: #eaeaea;
+    }
+
+/* ===== Header ===== */
+header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    background-color: inherit;
+}
+
+/* ===== Buttons ===== */
 button {
-    padding: 10px 14px;
-    border: 1px solid gray;
-    background: transparent;
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 6px;
+    border: 1px solid #888;
+    background-color: transparent;
     color: inherit;
     cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.1s ease;
 }
 
-body.dark button {
-    border-color: #777;
+    button:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+
+.layout.dark button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+button:active {
+    transform: scale(0.97);
+}
+
+/* ===== Content Styling ===== */
+main h1 {
+    font-size: 2.2rem;
+    margin-bottom: 10px;
+}
+
+main p {
+    font-size: 1.1rem;
+    opacity: 0.85;
+}
+
+/* ===== Card Style (future use) ===== */
+.card {
+    padding: 16px;
+    border-radius: 8px;
+    background-color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.layout.dark .card {
+    background-color: #1e1e1e;
+    box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
 }

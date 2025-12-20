@@ -1,21 +1,15 @@
-﻿using Microsoft.Maui.ApplicationModel;
-
-namespace SecureJournalapp_Paruhang_Khapung.Services
+﻿namespace SecureJournalapp_Paruhang_Khapung.Services
 {
     public class ThemeService
     {
         public bool IsDarkMode { get; private set; }
 
-        public void ApplyTheme()
-        {
-            Application.Current!.UserAppTheme =
-                IsDarkMode ? AppTheme.Dark : AppTheme.Light;
-        }
+        public event Action? OnThemeChanged;
 
         public void ToggleTheme()
         {
             IsDarkMode = !IsDarkMode;
-            ApplyTheme();
+            OnThemeChanged?.Invoke();
         }
     }
 }
