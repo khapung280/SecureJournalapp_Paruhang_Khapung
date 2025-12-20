@@ -1,27 +1,11 @@
-﻿@using Microsoft.AspNetCore.Components
-@inherits LayoutComponentBase
-@inject SecureJournalapp_Paruhang_Khapung.Services.ThemeService ThemeService
-
-<div class="layout">
-    <header style="padding:10px; border-bottom:1px solid gray;">
-        <button @onclick="ToggleTheme">
-            Switch to @(ThemeService.IsDarkMode ? "Light" : "Dark") Mode
-        </button>
-    </header>
-
-    <main style="padding:20px;">
-        @Body
-    </main>
-</div>
-
-@code {
-    protected override async Task OnInitializedAsync()
+﻿@code {
+    protected override void OnInitialized()
     {
-        await ThemeService.ApplyThemeAsync();
+        ThemeService.ApplyTheme();
     }
 
-    private async Task ToggleTheme()
+    private void ToggleTheme()
     {
-        await ThemeService.ToggleThemeAsync();
+        ThemeService.ToggleTheme();
     }
 }

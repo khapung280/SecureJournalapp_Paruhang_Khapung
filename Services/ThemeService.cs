@@ -1,28 +1,21 @@
-﻿using Microsoft.JSInterop;
+﻿using Microsoft.Maui.ApplicationModel;
 
 namespace SecureJournalapp_Paruhang_Khapung.Services
 {
     public class ThemeService
     {
-        private readonly IJSRuntime _js;
-
         public bool IsDarkMode { get; private set; }
 
-        public ThemeService(IJSRuntime js)
+        public void ApplyTheme()
         {
-            _js = js;
+            Application.Current!.UserAppTheme =
+                IsDarkMode ? AppTheme.Dark : AppTheme.Light;
         }
 
-        public async Task ApplyThemeAsync()
-        {
-            var theme = IsDarkMode ? "dark" : "light";
-            await _js.InvokeVoidAsync("document.body.className", theme);
-        }
-
-        public async Task ToggleThemeAsync()
+        public void ToggleTheme()
         {
             IsDarkMode = !IsDarkMode;
-            await ApplyThemeAsync();
+            ApplyTheme();
         }
     }
 }
