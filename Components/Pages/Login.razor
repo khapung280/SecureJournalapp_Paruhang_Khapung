@@ -1,0 +1,92 @@
+﻿@page "/login"
+
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject AuthDbService Db
+@inject SecurityService SecurityService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="login-wrapper">
+    <div class="login-card">
+
+        <div class="login-header">
+            🔐
+            <h2>Secure Journal</h2>
+            <p>Enter your PIN to unlock your private journal</p>
+        </div>
+
+        <div class="login-body">
+            <input type="password"
+                   class="pin-input"
+                   placeholder="● ● ● ●"
+                   maxlength="6"
+                   @bind="pin" />
+
+            <button class="unlock-btn" @onclick="UnlockJournal">
+                Unlock Journal
+            </button>
+
+            <!-- 🔁 RESET BUTTON -->
+            <button class="reset-btn" @onclick="ResetJournal">
+                Forgot PIN? Reset Journal
+            </button>
+
+            @if (!string.IsNullOrEmpty(error))
+            {
+                <div class="error-box">
+                    ⚠ @error
+                </div>
+            }
+        </div>
+
+        <div class="login-footer">
+            🔒 Your data is encrypted and stored locally
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private string pin = "";
+    private string? error;
+
+    private async Task UnlockJournal()
+    {
+        error = null;
+
+        var user = await Db.GetUserAsync();
+
+        // No PIN → setup
+        if (user == null)
+        {
+            Nav.NavigateTo("/setup", replace: true);
+            return;
+        }
+
+        // Verify PIN
+        if (SecurityService.VerifyPin(pin, user.PinHash))
+        {
+            Nav.NavigateTo("/", replace: true);
+        }
+        else
+        {
+            error = "Incorrect PIN. Please try again.";
+            pin = "";
+        }
+    }
+
+    // 🔁 RESET JOURNAL (FORGOT PIN)
+    private async Task ResetJournal()
+    {
+        bool confirm = await JS.InvokeAsync<bool>(
+            "confirm",
+            "This will permanently delete all journal data and reset your PIN. Continue?"
+        );
+
+        if (!confirm)
+            return;
+
+        await Db.DeleteAllAsync();
+        Nav.NavigateTo("/setup", replace: true);
+    }
+}

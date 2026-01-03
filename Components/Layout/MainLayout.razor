@@ -1,0 +1,33 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject SecureJournalapp_Paruhang_Khapung.Services.ThemeService ThemeService
+
+<div class="layout @(ThemeService.IsDarkMode ? "dark" : "")">
+    <header style="padding:12px 20px; border-bottom:1px solid rgba(128,128,128,0.3);">
+        <button @onclick="ToggleTheme">
+            @(ThemeService.IsDarkMode ? "🌙 Dark Mode" : "☀️ Light Mode")
+        </button>
+    </header>
+
+
+    <main style="padding:20px;">
+        @Body
+    </main>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += StateHasChanged;
+    }
+
+    void ToggleTheme()
+    {
+        ThemeService.ToggleTheme();
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= StateHasChanged;
+    }
+}

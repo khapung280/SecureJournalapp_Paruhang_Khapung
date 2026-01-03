@@ -1,0 +1,34 @@
+﻿@page "/"
+
+@inject AuthDbService Db
+@inject NavigationManager Nav
+
+<div class="card home-card">
+    <h1>📓 Secure Journal</h1>
+    <p>Your private, encrypted journal.</p>
+
+    <div class="home-actions">
+        <button class="btn primary" @onclick="GoToJournal">✍️ New Entry</button>
+        <button class="btn secondary" @onclick="GoToEntries">📚 View Entries</button>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await Db.GetUserAsync();
+
+        // 🔐 Force PIN setup if not exists
+        if (user == null)
+        {
+            Nav.NavigateTo("/setup", replace: true);
+        }
+        else
+        {
+            Nav.NavigateTo("/login", replace: true);
+        }
+    }
+
+    void GoToJournal() => Nav.NavigateTo("/journal");
+    void GoToEntries() => Nav.NavigateTo("/entries");
+}
