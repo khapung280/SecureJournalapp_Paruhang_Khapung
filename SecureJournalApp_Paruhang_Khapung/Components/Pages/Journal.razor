@@ -1,0 +1,387 @@
+﻿@page "/journal"
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject JournalDbService JournalService
+@inject MarkdownService MarkdownService
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="journal-container">
+    <div class="journal-header">
+        <h2>✍️ @(CurrentEntry?.EntryId > 0 ? "Edit Journal Entry" : "New Journal Entry")</h2>
+        <div class="header-actions">
+            <button class="btn secondary" @onclick="Cancel">Cancel</button>
+            <button class="btn primary" @onclick="SaveEntry" disabled="@(!IsValid)">Save Entry</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="error-message">⚠️ @ErrorMessage</div>
+    }
+
+    @if (!string.IsNullOrEmpty(SuccessMessage))
+    {
+        <div class="success-message">✅ @SuccessMessage</div>
+    }
+
+    <div class="journal-form">
+        <!-- Date Selection -->
+        <div class="form-group">
+            <label>Date *</label>
+            <input type="date" @bind="EntryDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            <small class="form-hint">Only one entry per day is allowed</small>
+        </div>
+
+        <!-- Title -->
+        <div class="form-group">
+            <label>Title *</label>
+            <input type="text" @bind="Title" placeholder="Entry title..." class="form-control" maxlength="200" />
+        </div>
+
+        <!-- Content (Markdown Editor) -->
+        <div class="form-group">
+            <label>Content *</label>
+            <div class="markdown-editor-container">
+                <textarea @bind="Content" 
+                          placeholder="Write your thoughts here... Markdown supported: **bold**, *italic*, # headings, - lists, [links](url)"
+                          class="markdown-editor"></textarea>
+                <div class="markdown-preview">
+                    <div class="preview-label">Preview:</div>
+                    <div class="preview-content" @onclick="FocusEditor">
+                        @((MarkupString)MarkdownService.ConvertToHtml(Content ?? ""))
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Primary Mood Selection -->
+        <div class="form-group">
+            <label>Primary Mood *</label>
+            <select @bind="SelectedPrimaryMoodId" class="form-control">
+                <option value="0">-- Select Primary Mood --</option>
+                @foreach (var mood in AllMoods)
+                {
+                    <option value="@mood.MoodId">@mood.Name (@mood.Category)</option>
+                }
+            </select>
+        </div>
+
+        <!-- Secondary Moods Selection -->
+        <div class="form-group">
+            <label>Secondary Moods (Optional, max 2)</label>
+            <div class="mood-selection">
+                @foreach (var mood in AllMoods)
+                {
+                    <label class="mood-checkbox">
+                        <input type="checkbox" 
+                               value="@mood.MoodId" 
+                               checked="@(SelectedSecondaryMoodIds.Contains(mood.MoodId))"
+                               @onchange="@((ChangeEventArgs e) => ToggleSecondaryMood(mood.MoodId, e.Value?.ToString() == "True"))" />
+                        <span>@mood.Name</span>
+                    </label>
+                }
+            </div>
+            <small class="form-hint">@SelectedSecondaryMoodIds.Count / 2 selected</small>
+        </div>
+
+        <!-- Tags Selection -->
+        <div class="form-group">
+            <label>Tags</label>
+            <div class="tag-selection">
+                <div class="tag-list">
+                    @foreach (var tag in AllTags)
+                    {
+                        <label class="tag-checkbox">
+                            <input type="checkbox" 
+                                   value="@tag.TagId" 
+                                   checked="@(SelectedTagIds.Contains(tag.TagId))"
+                                   @onchange="@((ChangeEventArgs e) => ToggleTag(tag.TagId, e.Value?.ToString() == "True"))" />
+                            <span class="tag-badge @(tag.IsPreBuilt ? "prebuilt" : "custom")">@tag.Name</span>
+                        </label>
+                    }
+                </div>
+                <div class="tag-create">
+                    <input type="text" @bind="NewTagName" @bind:event="oninput" placeholder="Create custom tag..." class="form-control tag-input" />
+                    <button type="button" class="btn small" @onclick="CreateCustomTag" disabled="@(string.IsNullOrWhiteSpace(NewTagName))">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entry Metadata (if editing) -->
+        @if (CurrentEntry?.EntryId > 0)
+        {
+            <div class="form-group metadata">
+                <small>
+                    Created: @CurrentEntry.CreatedAt.ToString("yyyy-MM-dd HH:mm") | 
+                    Updated: @CurrentEntry.UpdatedAt.ToString("yyyy-MM-dd HH:mm")
+                </small>
+            </div>
+        }
+    </div>
+
+    <!-- Delete Button (only when editing) -->
+    @if (CurrentEntry?.EntryId > 0)
+    {
+        <div class="delete-section">
+            <button class="btn danger" @onclick="DeleteEntry">🗑️ Delete Entry</button>
+        </div>
+    }
+</div>
+
+@code {
+    private JournalEntry? CurrentEntry { get; set; }
+    private string Title { get; set; } = "";
+    private string Content { get; set; } = "";
+    private DateTime EntryDate { get; set; } = DateTime.Today;
+    private int SelectedPrimaryMoodId { get; set; }
+    private List<int> SelectedSecondaryMoodIds { get; set; } = new();
+    private List<int> SelectedTagIds { get; set; } = new();
+    private List<Mood> AllMoods { get; set; } = new();
+    private List<Tag> AllTags { get; set; } = new();
+    private string NewTagName { get; set; } = "";
+    private string? ErrorMessage { get; set; }
+    private string? SuccessMessage { get; set; }
+
+    private bool IsValid => !string.IsNullOrWhiteSpace(Title) && 
+                           !string.IsNullOrWhiteSpace(Content) && 
+                           SelectedPrimaryMoodId > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 🔓 Check if app is unlocked - redirect to login if not
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        // Check if editing existing entry (from query parameter)
+        var uri = Nav.ToAbsoluteUri(Nav.Uri);
+        var query = uri.Query;
+        if (!string.IsNullOrEmpty(query) && query.StartsWith("?"))
+        {
+            var queryParams = query.Substring(1).Split('&');
+            foreach (var param in queryParams)
+            {
+                var parts = param.Split('=');
+                if (parts.Length == 2 && parts[0] == "id")
+                {
+                    if (int.TryParse(Uri.UnescapeDataString(parts[1]), out var entryId))
+                    {
+                        await LoadEntryAsync(entryId);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If not editing, check if entry exists for today
+        if (CurrentEntry == null)
+        {
+            var todayEntry = await JournalService.GetEntryByDateAsync(DateTime.Today);
+            if (todayEntry != null)
+            {
+                await LoadEntryAsync(todayEntry.EntryId);
+            }
+        }
+
+        await LoadMoodsAsync();
+        await LoadTagsAsync();
+    }
+
+    private async Task LoadEntryAsync(int entryId)
+    {
+        CurrentEntry = await JournalService.GetEntryByIdAsync(entryId);
+        if (CurrentEntry != null)
+        {
+            Title = CurrentEntry.Title;
+            Content = CurrentEntry.Content;
+            EntryDate = CurrentEntry.EntryDate;
+
+            // Load moods
+            var (primary, secondaries) = await JournalService.GetEntryMoodsAsync(entryId);
+            if (primary != null)
+            {
+                SelectedPrimaryMoodId = primary.MoodId;
+            }
+            SelectedSecondaryMoodIds = secondaries.Select(m => m.MoodId).ToList();
+
+            // Load tags
+            var tags = await JournalService.GetEntryTagsAsync(entryId);
+            SelectedTagIds = tags.Select(t => t.TagId).ToList();
+        }
+    }
+
+    private async Task LoadMoodsAsync()
+    {
+        AllMoods = await JournalService.GetAllMoodsAsync();
+    }
+
+    private async Task LoadTagsAsync()
+    {
+        AllTags = await JournalService.GetAllTagsAsync();
+    }
+
+    private void ToggleSecondaryMood(int moodId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (SelectedSecondaryMoodIds.Count >= 2)
+            {
+                ErrorMessage = "Maximum 2 secondary moods allowed.";
+                return;
+            }
+            if (moodId == SelectedPrimaryMoodId)
+            {
+                ErrorMessage = "Primary mood cannot be selected as secondary.";
+                return;
+            }
+            SelectedSecondaryMoodIds.Add(moodId);
+        }
+        else
+        {
+            SelectedSecondaryMoodIds.Remove(moodId);
+        }
+        ErrorMessage = null;
+    }
+
+    private void ToggleTag(int tagId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!SelectedTagIds.Contains(tagId))
+            {
+                SelectedTagIds.Add(tagId);
+            }
+        }
+        else
+        {
+            SelectedTagIds.Remove(tagId);
+        }
+    }
+
+    private async Task CreateCustomTag()
+    {
+        if (string.IsNullOrWhiteSpace(NewTagName))
+            return;
+
+        try
+        {
+            var newTag = await JournalService.CreateTagAsync(NewTagName);
+            AllTags.Add(newTag);
+            SelectedTagIds.Add(newTag.TagId);
+            NewTagName = "";
+            ErrorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task SaveEntry()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+
+        try
+        {
+            if (!IsValid)
+            {
+                ErrorMessage = "Please fill in all required fields (Title, Content, Primary Mood).";
+                return;
+            }
+
+            JournalEntry entry;
+            if (CurrentEntry?.EntryId > 0)
+            {
+                // Update existing entry
+                CurrentEntry.Title = Title;
+                CurrentEntry.Content = Content;
+                CurrentEntry.EntryDate = EntryDate;
+                var updated = await JournalService.UpdateEntryAsync(CurrentEntry);
+                if (!updated)
+                {
+                    ErrorMessage = "Failed to update entry.";
+                    return;
+                }
+                entry = CurrentEntry;
+            }
+            else
+            {
+                // Create new entry
+                entry = new JournalEntry
+                {
+                    Title = Title,
+                    Content = Content,
+                    EntryDate = EntryDate
+                };
+                var createdEntry = await JournalService.CreateEntryAsync(entry);
+                if (createdEntry == null)
+                {
+                    ErrorMessage = "Failed to create entry.";
+                    return;
+                }
+                entry = createdEntry;
+                CurrentEntry = entry;
+            }
+
+            // Save moods
+            await JournalService.SetEntryMoodsAsync(entry.EntryId, SelectedPrimaryMoodId, SelectedSecondaryMoodIds);
+
+            // Save tags
+            await JournalService.SetEntryTagsAsync(entry.EntryId, SelectedTagIds);
+
+            SuccessMessage = CurrentEntry != null && CurrentEntry.EntryId > 0 ? "Entry updated successfully!" : "Entry created successfully!";
+            
+            // Reload entry to get updated timestamps
+            if (entry != null)
+            {
+                await LoadEntryAsync(entry.EntryId);
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task DeleteEntry()
+    {
+        if (CurrentEntry == null) return;
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete the entry for {CurrentEntry.EntryDate:yyyy-MM-dd}? This action cannot be undone.");
+
+        if (!confirmed) return;
+
+        try
+        {
+            var deleted = await JournalService.DeleteEntryAsync(CurrentEntry.EntryId);
+            if (deleted)
+            {
+                Nav.NavigateTo("/entries");
+            }
+            else
+            {
+                ErrorMessage = "Failed to delete entry.";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+    }
+
+    private void Cancel()
+    {
+        Nav.NavigateTo("/entries");
+    }
+
+    private void FocusEditor()
+    {
+        // Focus will be handled by user clicking in the textarea
+    }
+}

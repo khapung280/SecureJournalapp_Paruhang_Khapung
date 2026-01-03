@@ -1,7 +1,7 @@
 ﻿using ObjCRuntime;
 using UIKit;
 
-namespace SecureJournalApp_Paruhang_Khapung
+namespace SecureJournalapp_Paruhang_Khapung
 {
     public class Program
     {

@@ -1,17 +1,44 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject SecureJournalapp_Paruhang_Khapung.Services.ThemeService ThemeService
+@inject SecureJournalapp_Paruhang_Khapung.Services.AuthStateService AuthState
+@inject NavigationManager Nav
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="layout @(ThemeService.IsDarkMode ? "dark" : "")">
+    <header style="padding:12px 20px; border-bottom:1px solid rgba(128,128,128,0.3); display: flex; justify-content: space-between; align-items: center;">
+        <button @onclick="LockApp" title="Lock App">🔒 Lock</button>
+        <button @onclick="ToggleTheme">
+            @(ThemeService.IsDarkMode ? "🌙 Dark Mode" : "☀️ Light Mode")
+        </button>
+    </header>
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
 
-        <article class="content px-4">
-            @Body
-        </article>
+    <main style="padding:20px;">
+        @Body
     </main>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ThemeService.OnThemeChanged += StateHasChanged;
+        AuthState.OnUnlockStateChanged += StateHasChanged;
+    }
+
+    void ToggleTheme()
+    {
+        ThemeService.ToggleTheme();
+    }
+
+    void LockApp()
+    {
+        AuthState.Lock();
+        Nav.NavigateTo("/login", replace: true);
+    }
+
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= StateHasChanged;
+        AuthState.OnUnlockStateChanged -= StateHasChanged;
+    }
+}

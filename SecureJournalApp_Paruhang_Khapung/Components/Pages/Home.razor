@@ -1,5 +1,42 @@
 ﻿@page "/"
 
-<h1>Hello, world!</h1>
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject AuthDbService Db
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
 
-Welcome to your new app.
+<div class="card home-card">
+    <h1>📓 Secure Journal</h1>
+    <p>Your private, encrypted journal.</p>
+
+    <div class="home-actions">
+        <button class="btn primary" @onclick="GoToJournal">✍️ New Entry</button>
+        <button class="btn secondary" @onclick="GoToEntries">📚 View Entries</button>
+    </div>
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await Db.GetUserAsync();
+
+        // 🔐 Force PIN setup if not exists
+        if (user == null)
+        {
+            Nav.NavigateTo("/setup", replace: true);
+            return;
+        }
+
+        // 🔓 Check if app is unlocked - if not, redirect to login
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        // App is unlocked - user can access features
+    }
+
+    void GoToJournal() => Nav.NavigateTo("/journal");
+    void GoToEntries() => Nav.NavigateTo("/entries");
+}

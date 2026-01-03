@@ -1,7 +1,7 @@
 ﻿using Android.App;
 using Android.Runtime;
 
-namespace SecureJournalApp_Paruhang_Khapung
+namespace SecureJournalapp_Paruhang_Khapung
 {
     [Application]
     public class MainApplication : MauiApplication

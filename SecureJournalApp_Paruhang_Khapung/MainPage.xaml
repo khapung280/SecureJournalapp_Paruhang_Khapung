@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:local="clr-namespace:SecureJournalApp_Paruhang_Khapung"
-             xmlns:components="clr-namespace:SecureJournalApp_Paruhang_Khapung.Components"
-             x:Class="SecureJournalApp_Paruhang_Khapung.MainPage">
+             xmlns:local="clr-namespace:SecureJournalapp_Paruhang_Khapung"
+             xmlns:components="clr-namespace:SecureJournalapp_Paruhang_Khapung.Components"
+             x:Class="SecureJournalapp_Paruhang_Khapung.MainPage">
 
     <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
         <BlazorWebView.RootComponents>

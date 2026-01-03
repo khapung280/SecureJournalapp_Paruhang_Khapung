@@ -1,0 +1,301 @@
+﻿@page "/entries"
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject JournalDbService JournalService
+@inject MarkdownService MarkdownService
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="entries-container">
+    <div class="entries-header">
+        <h2>📖 My Journal Entries</h2>
+        <button class="btn primary" @onclick="CreateNewEntry">✍️ New Entry</button>
+    </div>
+
+    <!-- Search and Filter Section -->
+    <div class="search-filter-card">
+        <h3>Search & Filter</h3>
+        
+        <!-- Search Text -->
+        <div class="filter-group">
+            <label>Search</label>
+            <input type="text" @bind="SearchText" @bind:event="oninput" @onkeyup="OnSearchKeyUp" 
+                   placeholder="Search by title or content..." class="form-control" />
+        </div>
+
+        <!-- Date Range Filter -->
+        <div class="filter-row">
+            <div class="filter-group">
+                <label>From Date</label>
+                <input type="date" @bind="StartDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            </div>
+            <div class="filter-group">
+                <label>To Date</label>
+                <input type="date" @bind="EndDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            </div>
+        </div>
+
+        <!-- Mood Filter -->
+        <div class="filter-group">
+            <label>Filter by Mood</label>
+            <div class="mood-filter-list">
+                @foreach (var mood in AllMoods)
+                {
+                    <label class="mood-filter-checkbox">
+                        <input type="checkbox" 
+                               value="@mood.MoodId" 
+                               checked="@(SelectedMoodFilterIds.Contains(mood.MoodId))"
+                               @onchange="@((ChangeEventArgs e) => ToggleMoodFilter(mood.MoodId, e.Value?.ToString() == "True"))" />
+                        <span class="mood-badge @mood.Category.ToLower()">@mood.Name</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <!-- Tag Filter -->
+        <div class="filter-group">
+            <label>Filter by Tag</label>
+            <div class="tag-filter-list">
+                @foreach (var tag in AllTags)
+                {
+                    <label class="tag-filter-checkbox">
+                        <input type="checkbox" 
+                               value="@tag.TagId" 
+                               checked="@(SelectedTagFilterIds.Contains(tag.TagId))"
+                               @onchange="@((ChangeEventArgs e) => ToggleTagFilter(tag.TagId, e.Value?.ToString() == "True"))" />
+                        <span class="tag-badge @(tag.IsPreBuilt ? "prebuilt" : "custom")">@tag.Name</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button class="btn secondary" @onclick="ClearFilters">Clear Filters</button>
+            <button class="btn primary" @onclick="ApplyFilters">Apply Filters</button>
+        </div>
+    </div>
+
+    <!-- Results Count -->
+    <div class="results-info">
+        <span>@FilteredEntries.Count entry(ies) found</span>
+    </div>
+
+    <!-- Entries List -->
+    @if (FilteredEntries.Any())
+    {
+        <div class="entries-list">
+            @foreach (var entry in FilteredEntries)
+            {
+                <div class="entry-card">
+                    <div class="entry-header">
+                        <div class="entry-title-section">
+                            <h3>@entry.Title</h3>
+                            <span class="entry-date">@entry.EntryDate.ToString("yyyy-MM-dd")</span>
+                        </div>
+                        <div class="entry-actions">
+                            <button class="btn-icon" @onclick="() => EditEntry(entry.EntryId)" title="Edit">✏️</button>
+                            <button class="btn-icon" @onclick="() => DeleteEntry(entry.EntryId)" title="Delete">🗑️</button>
+                        </div>
+                    </div>
+
+                    <div class="entry-content-preview">
+                        @((MarkupString)MarkdownService.ConvertToHtml(entry.Content.Length > 200 ? entry.Content.Substring(0, 200) + "..." : entry.Content))
+                    </div>
+
+                    <div class="entry-meta">
+                        <div class="entry-moods">
+                            @if (EntryMoodsCache.TryGetValue(entry.EntryId, out var entryMoods))
+                            {
+                                @if (entryMoods.Primary != null)
+                                {
+                                    <span class="mood-badge @entryMoods.Primary.Category.ToLower() primary">@entryMoods.Primary.Name</span>
+                                }
+                                @foreach (var mood in entryMoods.Secondaries)
+                                {
+                                    <span class="mood-badge @mood.Category.ToLower()">@mood.Name</span>
+                                }
+                            }
+                        </div>
+                        <div class="entry-tags">
+                            @if (EntryTagsCache.TryGetValue(entry.EntryId, out var entryTags))
+                            {
+                                @foreach (var tag in entryTags)
+                                {
+                                    <span class="tag-badge @(tag.IsPreBuilt ? "prebuilt" : "custom")">@tag.Name</span>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <div class="entry-footer">
+                        <small>Created: @entry.CreatedAt.ToString("yyyy-MM-dd HH:mm") | Updated: @entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</small>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="empty-state">
+            <p>@(IsFiltered ? "No entries match your search criteria." : "No journal entries yet. Create your first entry!")</p>
+            <button class="btn primary" @onclick="CreateNewEntry">Create First Entry</button>
+        </div>
+    }
+</div>
+
+@code {
+    private List<JournalEntry> AllEntries { get; set; } = new();
+    private List<JournalEntry> FilteredEntries { get; set; } = new();
+    private List<Mood> AllMoods { get; set; } = new();
+    private List<Tag> AllTags { get; set; } = new();
+    private Dictionary<int, (Mood? Primary, List<Mood> Secondaries)> EntryMoodsCache { get; set; } = new();
+    private Dictionary<int, List<Tag>> EntryTagsCache { get; set; } = new();
+
+    private string SearchText { get; set; } = "";
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+    private List<int> SelectedMoodFilterIds { get; set; } = new();
+    private List<int> SelectedTagFilterIds { get; set; } = new();
+    private bool IsFiltered { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 🔓 Check if app is unlocked - redirect to login if not
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        AllEntries = await JournalService.GetAllEntriesAsync();
+        AllMoods = await JournalService.GetAllMoodsAsync();
+        AllTags = await JournalService.GetAllTagsAsync();
+        await ApplyFilters();
+    }
+
+    private async Task ApplyFilters()
+    {
+        IsFiltered = !string.IsNullOrWhiteSpace(SearchText) || 
+                     StartDate.HasValue || 
+                     EndDate.HasValue || 
+                     SelectedMoodFilterIds.Any() || 
+                     SelectedTagFilterIds.Any();
+
+        FilteredEntries = await JournalService.SearchEntriesAsync(
+            searchText: string.IsNullOrWhiteSpace(SearchText) ? null : SearchText,
+            startDate: StartDate,
+            endDate: EndDate,
+            moodIds: SelectedMoodFilterIds.Any() ? SelectedMoodFilterIds : null,
+            tagIds: SelectedTagFilterIds.Any() ? SelectedTagFilterIds : null
+        );
+
+        // Preload moods and tags for all filtered entries
+        await LoadEntryMetadataAsync();
+
+        StateHasChanged();
+    }
+
+    private async Task LoadEntryMetadataAsync()
+    {
+        EntryMoodsCache.Clear();
+        EntryTagsCache.Clear();
+
+        foreach (var entry in FilteredEntries)
+        {
+            var moods = await JournalService.GetEntryMoodsAsync(entry.EntryId);
+            EntryMoodsCache[entry.EntryId] = moods;
+
+            var tags = await JournalService.GetEntryTagsAsync(entry.EntryId);
+            EntryTagsCache[entry.EntryId] = tags;
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        // Debounce search - apply after user stops typing
+        await Task.Delay(300);
+        await ApplyFilters();
+    }
+
+    private void ToggleMoodFilter(int moodId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!SelectedMoodFilterIds.Contains(moodId))
+            {
+                SelectedMoodFilterIds.Add(moodId);
+            }
+        }
+        else
+        {
+            SelectedMoodFilterIds.Remove(moodId);
+        }
+    }
+
+    private void ToggleTagFilter(int tagId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!SelectedTagFilterIds.Contains(tagId))
+            {
+                SelectedTagFilterIds.Add(tagId);
+            }
+        }
+        else
+        {
+            SelectedTagFilterIds.Remove(tagId);
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        SearchText = "";
+        StartDate = null;
+        EndDate = null;
+        SelectedMoodFilterIds.Clear();
+        SelectedTagFilterIds.Clear();
+        await ApplyFilters();
+    }
+
+    private void CreateNewEntry()
+    {
+        Nav.NavigateTo("/journal");
+    }
+
+    private void EditEntry(int entryId)
+    {
+        Nav.NavigateTo($"/journal?id={entryId}");
+    }
+
+    private async Task DeleteEntry(int entryId)
+    {
+        var entry = AllEntries.FirstOrDefault(e => e.EntryId == entryId);
+        if (entry == null) return;
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete the entry '{entry.Title}' from {entry.EntryDate:yyyy-MM-dd}? This action cannot be undone.");
+
+        if (!confirmed) return;
+
+        try
+        {
+            var deleted = await JournalService.DeleteEntryAsync(entryId);
+            if (deleted)
+            {
+                await LoadDataAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error deleting entry: {ex.Message}");
+        }
+    }
+
+}

@@ -1,4 +1,4 @@
-﻿namespace SecureJournalApp_Paruhang_Khapung
+﻿namespace SecureJournalapp_Paruhang_Khapung
 {
     public partial class MainPage : ContentPage
     {

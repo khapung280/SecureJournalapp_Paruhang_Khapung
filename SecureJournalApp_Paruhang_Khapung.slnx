@@ -1,8 +1,3 @@
 <Solution>
-  <Folder Name="/Solution Items/">
-    <File Path=".gitignore" />
-  </Folder>
-  <Project Path="SecureJournalApp_Paruhang_Khapung/SecureJournalApp_Paruhang_Khapung.csproj">
-    <Deploy Solution="Debug|*" />
-  </Project>
+  <Project Path="SecureJournalapp_Paruhang_Khapung/SecureJournalapp_Paruhang_Khapung.csproj" />
 </Solution>

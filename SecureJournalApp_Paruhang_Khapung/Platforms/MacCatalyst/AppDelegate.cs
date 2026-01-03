@@ -1,6 +1,6 @@
 ﻿using Foundation;
 
-namespace SecureJournalApp_Paruhang_Khapung
+namespace SecureJournalapp_Paruhang_Khapung
 {
     [Register("AppDelegate")]
     public class AppDelegate : MauiUIApplicationDelegate
