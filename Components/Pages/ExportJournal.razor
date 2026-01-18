@@ -1,0 +1,513 @@
+@page "/export"
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject JournalDbService JournalService
+@inject PdfExportService PdfExportService
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="export-container">
+    <div class="export-header">
+        <h1>Export Journal Entries</h1>
+        <button class="btn secondary" @onclick="GoToEntries">← Back to Entries</button>
+    </div>
+
+    <div class="export-card">
+        <h2>Select Date Range</h2>
+        <p class="export-description">Choose a date range to export your journal entries as a PDF file.</p>
+
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="error-message">@ErrorMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(SuccessMessage))
+        {
+            <div class="success-message">@SuccessMessage</div>
+        }
+
+        <div class="export-form">
+            <!-- Date Range Selection -->
+            <div class="form-group">
+                <label>From Date *</label>
+                <input type="date" @bind="StartDate" @bind:format="yyyy-MM-dd" @bind:event="onchange" 
+                       @bind:after="OnDateChanged" class="form-control" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                <small class="form-hint">Select the start date (cannot be in the future)</small>
+            </div>
+
+            <div class="form-group">
+                <label>To Date *</label>
+                <input type="date" @bind="EndDate" @bind:format="yyyy-MM-dd" @bind:event="onchange" 
+                       @bind:after="OnDateChanged" class="form-control" max="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                <small class="form-hint">Select the end date (cannot be in the future)</small>
+            </div>
+
+            <!-- Validation Message -->
+            @if (!IsDateRangeValid)
+            {
+                <div class="validation-message">
+                    Start date must be before or equal to end date.
+                </div>
+            }
+
+            <!-- Entries Count Preview -->
+            @if (IsDateRangeValid && StartDate.HasValue && EndDate.HasValue)
+            {
+                <div class="entries-preview">
+                    <strong>Preview:</strong> @FilteredEntriesCount entry(ies) will be exported
+                    @if (FilteredEntriesCount == 0)
+                    {
+                        <div class="no-entries-warning">
+                            No journal entries found for the selected date range.
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Export Button -->
+            <div class="export-actions">
+                <button class="btn primary" @onclick="ExportToPdf" disabled="@(!CanExport)">
+                    Export as PDF
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Instructions -->
+    <div class="export-info-card">
+        <h3>Export Information</h3>
+        <ul>
+            <li>Exported PDF will include all entries within the selected date range</li>
+            <li>Entries are ordered chronologically (oldest first)</li>
+            <li>Each entry includes: date, title, content, moods, and tags</li>
+            <li>PDF file will be saved to your Downloads folder (Windows)</li>
+            <li>File name format: <code>SecureJournal_Entries_YYYY-MM-DD_to_YYYY-MM-DD.pdf</code></li>
+        </ul>
+    </div>
+</div>
+
+<style>
+    .export-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .export-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .export-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        color: #6366f1;
+    }
+
+    .layout.dark .export-header h1 {
+        color: #818cf8;
+    }
+
+    .export-card {
+        background: var(--card-bg, #ffffff);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .layout.dark .export-card {
+        background: #1e1e1e;
+        box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
+    }
+
+    .export-card h2 {
+        margin: 0 0 12px 0;
+        font-size: 1.5rem;
+        color: #6366f1;
+    }
+
+    .layout.dark .export-card h2 {
+        color: #818cf8;
+    }
+
+    .export-description {
+        margin: 0 0 20px 0;
+        opacity: 0.8;
+        font-size: 0.95rem;
+    }
+
+    .export-form {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .form-group label {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    .form-control {
+        padding: 10px 12px;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        border-radius: 6px;
+        font-size: 14px;
+        background: var(--card-bg, #ffffff);
+        color: inherit;
+    }
+
+    .layout.dark .form-control {
+        border-color: rgba(255, 255, 255, 0.2);
+        background: #1e1e1e;
+    }
+
+    .form-hint {
+        font-size: 0.85rem;
+        opacity: 0.6;
+        font-style: italic;
+    }
+
+    .validation-message {
+        padding: 12px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 6px;
+        color: #ef4444;
+        font-size: 0.9rem;
+    }
+
+    .layout.dark .validation-message {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .entries-preview {
+        padding: 16px;
+        background: rgba(99, 102, 241, 0.05);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+
+    .layout.dark .entries-preview {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .no-entries-warning {
+        margin-top: 8px;
+        padding: 8px;
+        background: rgba(245, 158, 11, 0.1);
+        border-radius: 4px;
+        color: #f59e0b;
+        font-size: 0.9rem;
+    }
+
+    .layout.dark .no-entries-warning {
+        background: rgba(245, 158, 11, 0.2);
+    }
+
+    .export-actions {
+        margin-top: 8px;
+    }
+
+    .export-actions .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .error-message {
+        padding: 12px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 6px;
+        color: #ef4444;
+        margin-bottom: 16px;
+    }
+
+    .layout.dark .error-message {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .success-message {
+        padding: 12px;
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: 6px;
+        color: #10b981;
+        margin-bottom: 16px;
+    }
+
+    .layout.dark .success-message {
+        background: rgba(16, 185, 129, 0.2);
+        border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .export-info-card {
+        background: var(--card-bg, #ffffff);
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .layout.dark .export-info-card {
+        background: #1e1e1e;
+        box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
+    }
+
+    .export-info-card h3 {
+        margin: 0 0 12px 0;
+        font-size: 1.2rem;
+        color: #6366f1;
+    }
+
+    .layout.dark .export-info-card h3 {
+        color: #818cf8;
+    }
+
+    .export-info-card ul {
+        margin: 0;
+        padding-left: 20px;
+        opacity: 0.8;
+    }
+
+    .export-info-card li {
+        margin-bottom: 8px;
+        line-height: 1.6;
+    }
+
+    .export-info-card code {
+        background: rgba(99, 102, 241, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9em;
+    }
+
+    .layout.dark .export-info-card code {
+        background: rgba(99, 102, 241, 0.2);
+    }
+</style>
+
+@code {
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+    private string? ErrorMessage { get; set; }
+    private string? SuccessMessage { get; set; }
+    private int FilteredEntriesCount { get; set; }
+
+    /// <summary>
+    /// DATE RANGE VALIDATION:
+    /// Validates that the selected date range is valid for export.
+    /// Rules:
+    /// - Start date must be before or equal to end date
+    /// - Both dates must be selected
+    /// - Dates cannot be in the future
+    /// </summary>
+    private bool IsDateRangeValid
+    {
+        get
+        {
+            if (!StartDate.HasValue || !EndDate.HasValue)
+                return false;
+
+            // Start date must be <= end date
+            if (StartDate.Value.Date > EndDate.Value.Date)
+                return false;
+
+            // Dates cannot be in the future
+            var today = DateTime.Today;
+            if (StartDate.Value.Date > today || EndDate.Value.Date > today)
+                return false;
+
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// EXPORT BUTTON STATE:
+    /// Determines if the export button should be enabled.
+    /// Enabled only when:
+    /// - Date range is valid
+    /// - At least one entry exists in the selected range
+    /// </summary>
+    private bool CanExport => IsDateRangeValid && FilteredEntriesCount > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if app is unlocked - redirect to login if not
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        // Set default date range (last 30 days)
+        EndDate = DateTime.Today;
+        StartDate = DateTime.Today.AddDays(-30);
+
+        await UpdateEntriesCount();
+    }
+
+    /// <summary>
+    /// DATE RANGE FILTERING:
+    /// Updates the count of entries that will be exported based on the selected date range.
+    /// This provides real-time feedback to the user about how many entries will be included.
+    /// </summary>
+    private async Task UpdateEntriesCount()
+    {
+        if (!IsDateRangeValid || !StartDate.HasValue || !EndDate.HasValue)
+        {
+            FilteredEntriesCount = 0;
+            return;
+        }
+
+        try
+        {
+            // Fetch entries within the date range
+            var entries = await JournalService.SearchEntriesAsync(
+                startDate: StartDate.Value,
+                endDate: EndDate.Value
+            );
+
+            FilteredEntriesCount = entries.Count;
+        }
+        catch
+        {
+            FilteredEntriesCount = 0;
+        }
+    }
+
+    private async Task OnDateChanged()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+        await UpdateEntriesCount();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// PDF EXPORT PROCESS:
+    /// Exports journal entries to PDF file.
+    /// 
+    /// Algorithm:
+    /// 1. Validate date range
+    /// 2. Fetch entries within date range from database
+    /// 3. Load moods and tags for each entry
+    /// 4. Generate PDF using PdfExportService
+    /// 5. Save PDF file to Downloads folder (Windows)
+    /// 6. Show success message
+    /// 
+    /// FILE SAVING PROCESS:
+    /// - Generate filename: SecureJournal_Entries_YYYY-MM-DD_to_YYYY-MM-DD.pdf
+    /// - Save to user's Downloads folder
+    /// - Use MAUI FileSystem APIs for cross-platform file access
+    /// </summary>
+    private async Task ExportToPdf()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+
+        try
+        {
+            // Validate date range
+            if (!IsDateRangeValid || !StartDate.HasValue || !EndDate.HasValue)
+            {
+                ErrorMessage = "Please select a valid date range.";
+                return;
+            }
+
+            // Fetch entries within date range
+            // DATE RANGE FILTERING: Get entries ordered by date (oldest first)
+            var entries = await JournalService.SearchEntriesAsync(
+                startDate: StartDate.Value,
+                endDate: EndDate.Value
+            );
+
+            if (!entries.Any())
+            {
+                ErrorMessage = "No journal entries found for the selected date range.";
+                return;
+            }
+
+            // Load moods and tags for all entries
+            var entryMoods = new Dictionary<int, (Mood? Primary, List<Mood> Secondaries)>();
+            var entryTags = new Dictionary<int, List<Tag>>();
+
+            foreach (var entry in entries)
+            {
+                var moods = await JournalService.GetEntryMoodsAsync(entry.EntryId);
+                entryMoods[entry.EntryId] = moods;
+
+                var tags = await JournalService.GetEntryTagsAsync(entry.EntryId);
+                entryTags[entry.EntryId] = tags;
+            }
+
+            // Generate PDF
+            var pdfBytes = PdfExportService.GeneratePdf(
+                entries,
+                entryMoods,
+                entryTags,
+                StartDate.Value,
+                EndDate.Value
+            );
+
+            // FILE SAVING PROCESS: Save PDF to Downloads folder
+            // Generate filename: SecureJournal_Entries_YYYY-MM-DD_to_YYYY-MM-DD.pdf
+            var fileName = $"SecureJournal_Entries_{StartDate.Value:yyyy-MM-dd}_to_{EndDate.Value:yyyy-MM-dd}.pdf";
+            
+            // For Windows MAUI, save to Downloads folder
+            var downloadsPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "Downloads"
+            );
+
+            // Ensure Downloads folder exists
+            if (!Directory.Exists(downloadsPath))
+            {
+                Directory.CreateDirectory(downloadsPath);
+            }
+
+            var filePath = Path.Combine(downloadsPath, fileName);
+
+            // Write PDF bytes to file
+            await File.WriteAllBytesAsync(filePath, pdfBytes);
+
+            // Show success message with file path
+            SuccessMessage = $"Journal entries exported successfully! File saved to: {filePath}";
+
+            // Optionally open the file location or file
+            try
+            {
+                // On Windows, we can try to open the file location
+                if (OperatingSystem.IsWindows())
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+                }
+            }
+            catch
+            {
+                // Ignore if we can't open file explorer
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error exporting journal entries: {ex.Message}";
+        }
+    }
+
+    private void GoToEntries() => Nav.NavigateTo("/entries");
+}

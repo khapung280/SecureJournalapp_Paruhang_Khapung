@@ -1,0 +1,570 @@
+﻿@page "/entries"
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject JournalDbService JournalService
+@inject MarkdownService MarkdownService
+@inject AuthStateService AuthState
+@inject StreakService StreakService
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="entries-container">
+    <div class="entries-header">
+        <div>
+            <h2>My Journal Entries</h2>
+            @if (AllEntries.Any())
+            {
+                <div class="streak-header">
+                    <span class="streak-badge current">Current: @CurrentStreak @(CurrentStreak == 1 ? "day" : "days")</span>
+                    <span class="streak-badge longest">Longest: @LongestStreak @(LongestStreak == 1 ? "day" : "days")</span>
+                    @if (MissedDays > 0)
+                    {
+                        <span class="streak-badge missed">Missed: @MissedDays @(MissedDays == 1 ? "day" : "days")</span>
+                    }
+                </div>
+            }
+        </div>
+        <div class="header-actions">
+            <button class="btn secondary" @onclick="GoToCalendar">Calendar</button>
+            <button class="btn secondary" @onclick="GoToDashboard">Dashboard</button>
+            <button class="btn secondary" @onclick="GoToExport">Export</button>
+            <button class="btn primary" @onclick="CreateNewEntry">New Entry</button>
+        </div>
+    </div>
+
+    <!-- Search and Filter Section -->
+    <div class="search-filter-card">
+        <h3>Search & Filter</h3>
+        
+        <!-- Search Text -->
+        <div class="filter-group">
+            <label>Search</label>
+            <input type="text" @bind="SearchText" @bind:event="oninput" @onkeyup="OnSearchKeyUp" 
+                   placeholder="Search by title or content..." class="form-control" />
+        </div>
+
+        <!-- Date Range Filter -->
+        <div class="filter-row">
+            <div class="filter-group">
+                <label>From Date</label>
+                <input type="date" @bind="StartDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            </div>
+            <div class="filter-group">
+                <label>To Date</label>
+                <input type="date" @bind="EndDate" @bind:format="yyyy-MM-dd" class="form-control" />
+            </div>
+        </div>
+
+        <!-- Mood Filter -->
+        <div class="filter-group">
+            <label>Filter by Mood</label>
+            <div class="mood-filter-list">
+                @foreach (var mood in AllMoods)
+                {
+                    <label class="mood-filter-checkbox">
+                        <input type="checkbox" 
+                               value="@mood.MoodId" 
+                               checked="@(SelectedMoodFilterIds.Contains(mood.MoodId))"
+                               @onchange="@((ChangeEventArgs e) => ToggleMoodFilter(mood.MoodId, e.Value?.ToString() == "True"))" />
+                        <span class="mood-badge @mood.Category.ToLower()">@mood.Name</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <!-- Tag Filter -->
+        <div class="filter-group">
+            <label>Filter by Tag</label>
+            <div class="tag-filter-list">
+                @foreach (var tag in AllTags)
+                {
+                    <label class="tag-filter-checkbox">
+                        <input type="checkbox" 
+                               value="@tag.TagId" 
+                               checked="@(SelectedTagFilterIds.Contains(tag.TagId))"
+                               @onchange="@((ChangeEventArgs e) => ToggleTagFilter(tag.TagId, e.Value?.ToString() == "True"))" />
+                        <span class="tag-badge @(tag.IsPreBuilt ? "prebuilt" : "custom")">@tag.Name</span>
+                    </label>
+                }
+            </div>
+        </div>
+
+        <!-- Filter Actions -->
+        <div class="filter-actions">
+            <button class="btn secondary" @onclick="ClearFilters">Clear Filters</button>
+            <button class="btn primary" @onclick="ApplyFilters">Apply Filters</button>
+        </div>
+    </div>
+
+    <!-- Results Count -->
+    <div class="results-info">
+        <span>@FilteredEntries.Count entry(ies) found</span>
+        @if (FilteredEntries.Any())
+        {
+            <span class="pagination-info"> | Page @CurrentPage of @TotalPages</span>
+        }
+    </div>
+
+    <!-- Entries List -->
+    @if (PaginatedEntries.Any())
+    {
+        <div class="entries-list">
+            @foreach (var entry in PaginatedEntries)
+            {
+                <div class="entry-card">
+                    <div class="entry-header">
+                        <div class="entry-title-section">
+                            <h3>@entry.Title</h3>
+                            <span class="entry-date">@entry.EntryDate.ToString("yyyy-MM-dd")</span>
+                        </div>
+                        <div class="entry-actions">
+                            <button class="btn-icon" @onclick="() => EditEntry(entry.EntryId)" title="Edit">Edit</button>
+                            <button class="btn-icon" @onclick="() => DeleteEntry(entry.EntryId)" title="Delete">Delete</button>
+                        </div>
+                    </div>
+
+                    <div class="entry-content-preview">
+                        @((MarkupString)MarkdownService.ConvertToHtml(entry.Content.Length > 200 ? entry.Content.Substring(0, 200) + "..." : entry.Content))
+                    </div>
+
+                    <div class="entry-meta">
+                        <div class="entry-moods">
+                            @if (EntryMoodsCache.TryGetValue(entry.EntryId, out var entryMoods))
+                            {
+                                @if (entryMoods.Primary != null)
+                                {
+                                    <span class="mood-badge @entryMoods.Primary.Category.ToLower() primary">@entryMoods.Primary.Name</span>
+                                }
+                                @foreach (var mood in entryMoods.Secondaries)
+                                {
+                                    <span class="mood-badge @mood.Category.ToLower()">@mood.Name</span>
+                                }
+                            }
+                        </div>
+                        <div class="entry-tags">
+                            @if (EntryTagsCache.TryGetValue(entry.EntryId, out var entryTags))
+                            {
+                                @foreach (var tag in entryTags)
+                                {
+                                    <span class="tag-badge @(tag.IsPreBuilt ? "prebuilt" : "custom")">@tag.Name</span>
+                                }
+                            }
+                        </div>
+                    </div>
+
+                    <div class="entry-footer">
+                        <small>Created: @entry.CreatedAt.ToString("yyyy-MM-dd HH:mm") | Updated: @entry.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</small>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Pagination Controls -->
+        @if (FilteredEntries.Any())
+        {
+            <div class="pagination-controls">
+                <button class="btn secondary" @onclick="PreviousPage" disabled="@(CurrentPage == 1)">
+                    ← Previous
+                </button>
+                <span class="page-indicator">Page @CurrentPage of @TotalPages</span>
+                <button class="btn secondary" @onclick="NextPage" disabled="@(CurrentPage == TotalPages)">
+                    Next →
+                </button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="empty-state">
+            <p>@(IsFiltered ? "No entries match your search criteria." : "No journal entries yet. Create your first entry!")</p>
+            <button class="btn primary" @onclick="CreateNewEntry">Create First Entry</button>
+        </div>
+    }
+</div>
+
+<style>
+    .pagination-info {
+        opacity: 0.7;
+        margin-left: 8px;
+    }
+
+    .streak-header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    .streak-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .streak-badge.current {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .streak-badge.longest {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .streak-badge.missed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .layout.dark .streak-badge.current {
+        background: rgba(245, 158, 11, 0.2);
+        border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .layout.dark .streak-badge.longest {
+        background: rgba(16, 185, 129, 0.2);
+        border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .layout.dark .streak-badge.missed {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .pagination-controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 20px;
+        margin-top: 24px;
+        padding: 16px;
+        background: var(--card-bg, #ffffff);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .layout.dark .pagination-controls {
+        background: #1e1e1e;
+    }
+
+    .page-indicator {
+        font-weight: 600;
+        font-size: 0.95rem;
+        min-width: 120px;
+        text-align: center;
+    }
+
+    .pagination-controls .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    @@media (max-width: 768px) {
+        .pagination-controls {
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .pagination-controls .btn {
+            width: 100%;
+        }
+    }
+</style>
+
+@code {
+    private List<JournalEntry> AllEntries { get; set; } = new();
+    private List<JournalEntry> FilteredEntries { get; set; } = new();
+    private List<Mood> AllMoods { get; set; } = new();
+    private List<Tag> AllTags { get; set; } = new();
+    private Dictionary<int, (Mood? Primary, List<Mood> Secondaries)> EntryMoodsCache { get; set; } = new();
+    private Dictionary<int, List<Tag>> EntryTagsCache { get; set; } = new();
+
+    private string SearchText { get; set; } = "";
+    private DateTime? StartDate { get; set; }
+    private DateTime? EndDate { get; set; }
+    private List<int> SelectedMoodFilterIds { get; set; } = new();
+    private List<int> SelectedTagFilterIds { get; set; } = new();
+    private bool IsFiltered { get; set; }
+
+    // ========== STREAK TRACKING PROPERTIES ==========
+    /// <summary>
+    /// Current streak: Consecutive days with entries up to today
+    /// </summary>
+    private int CurrentStreak { get; set; }
+
+    /// <summary>
+    /// Longest streak: Maximum consecutive days ever journaled
+    /// </summary>
+    private int LongestStreak { get; set; }
+
+    /// <summary>
+    /// Missed days: Days between first entry and today without entries
+    /// </summary>
+    private int MissedDays { get; set; }
+
+    // ========== PAGINATION PROPERTIES ==========
+    /// <summary>
+    /// PAGINATION LOGIC:
+    /// Number of entries to display per page (fixed at 5 entries per page).
+    /// This constant controls how many journal entries are shown before requiring page navigation.
+    /// For testing: Lowered to 1 entry per page to demonstrate pagination with current entries.
+    /// Change back to 5 for production use.
+    /// </summary>
+    private const int EntriesPerPage = 1;
+
+    /// <summary>
+    /// Current page number (1-indexed)
+    /// </summary>
+    private int CurrentPage { get; set; } = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if app is unlocked - redirect to login if not
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        AllEntries = await JournalService.GetAllEntriesAsync();
+        AllMoods = await JournalService.GetAllMoodsAsync();
+        AllTags = await JournalService.GetAllTagsAsync();
+        
+        // Calculate streak statistics when data loads
+        CurrentStreak = StreakService.CalculateCurrentStreak(AllEntries);
+        LongestStreak = StreakService.CalculateLongestStreak(AllEntries);
+        MissedDays = StreakService.CalculateMissedDays(AllEntries);
+        
+        await ApplyFilters();
+    }
+
+    private async Task ApplyFilters()
+    {
+        IsFiltered = !string.IsNullOrWhiteSpace(SearchText) || 
+                     StartDate.HasValue || 
+                     EndDate.HasValue || 
+                     SelectedMoodFilterIds.Any() || 
+                     SelectedTagFilterIds.Any();
+
+        FilteredEntries = await JournalService.SearchEntriesAsync(
+            searchText: string.IsNullOrWhiteSpace(SearchText) ? null : SearchText,
+            startDate: StartDate,
+            endDate: EndDate,
+            moodIds: SelectedMoodFilterIds.Any() ? SelectedMoodFilterIds : null,
+            tagIds: SelectedTagFilterIds.Any() ? SelectedTagFilterIds : null
+        );
+
+        // PAGINATION INTEGRATION: Reset to first page when filters change
+        // This ensures users always start from page 1 when search/filter criteria change,
+        // preventing confusion if the current page number exceeds the new filtered result count.
+        CurrentPage = 1;
+
+        // Preload moods and tags for paginated entries only
+        await LoadEntryMetadataAsync();
+
+        StateHasChanged();
+    }
+
+    private async Task LoadEntryMetadataAsync()
+    {
+        EntryMoodsCache.Clear();
+        EntryTagsCache.Clear();
+
+        // Only load metadata for entries on the current page (performance optimization)
+        foreach (var entry in PaginatedEntries)
+        {
+            var moods = await JournalService.GetEntryMoodsAsync(entry.EntryId);
+            EntryMoodsCache[entry.EntryId] = moods;
+
+            var tags = await JournalService.GetEntryTagsAsync(entry.EntryId);
+            EntryTagsCache[entry.EntryId] = tags;
+        }
+    }
+
+    // ========== PAGINATION COMPUTED PROPERTIES ==========
+
+    /// <summary>
+    /// PAGINATION LOGIC: Calculate Total Pages
+    /// Calculates the total number of pages needed to display all filtered entries.
+    /// Formula: Ceiling(Total Entries / Entries Per Page)
+    /// Example: 13 entries / 5 per page = 3 pages (pages 1-2 have 5 entries, page 3 has 3 entries)
+    /// </summary>
+    private int TotalPages => (int)Math.Ceiling((double)FilteredEntries.Count / EntriesPerPage);
+
+    /// <summary>
+    /// PAGINATION LOGIC: Get Entries for Current Page
+    /// Returns only the entries that should be displayed on the current page (5 entries max).
+    /// Uses Skip/Take pattern:
+    /// - Skip: (CurrentPage - 1) * EntriesPerPage (e.g., page 2 with 5 per page = skip 5 entries)
+    /// - Take: EntriesPerPage (take exactly 5 entries)
+    /// This ensures only 5 entries are shown at a time, improving performance and readability.
+    /// </summary>
+    private List<JournalEntry> PaginatedEntries
+    {
+        get
+        {
+            if (!FilteredEntries.Any())
+                return new List<JournalEntry>();
+
+            var skip = (CurrentPage - 1) * EntriesPerPage;
+            return FilteredEntries.Skip(skip).Take(EntriesPerPage).ToList();
+        }
+    }
+
+    // ========== PAGINATION METHODS ==========
+
+    /// <summary>
+    /// PAGINATION BEHAVIOR: Previous Page Navigation
+    /// Decrements the current page number and reloads metadata for the new page.
+    /// Validation: Only allows navigation if not already on page 1 (first page).
+    /// When filters are active, pagination works with filtered results.
+    /// UI: Previous button is disabled when CurrentPage == 1 (handled in markup).
+    /// </summary>
+    private async Task PreviousPage()
+    {
+        // Validate: Cannot go to previous page if already on page 1
+        if (CurrentPage > 1)
+        {
+            CurrentPage--;
+            // Reload metadata (moods/tags) for entries on the new page
+            await LoadEntryMetadataAsync();
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// PAGINATION BEHAVIOR: Next Page Navigation
+    /// Increments the current page number and reloads metadata for the new page.
+    /// Validation: Only allows navigation if not already on the last page.
+    /// When filters are active, pagination works with filtered results.
+    /// UI: Next button is disabled when CurrentPage == TotalPages (handled in markup).
+    /// </summary>
+    private async Task NextPage()
+    {
+        // Validate: Cannot go to next page if already on last page
+        if (CurrentPage < TotalPages)
+        {
+            CurrentPage++;
+            // Reload metadata (moods/tags) for entries on the new page
+            await LoadEntryMetadataAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        // Debounce search - apply after user stops typing
+        await Task.Delay(300);
+        CurrentPage = 1; // Reset to first page when searching
+        await ApplyFilters();
+    }
+
+    private void ToggleMoodFilter(int moodId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!SelectedMoodFilterIds.Contains(moodId))
+            {
+                SelectedMoodFilterIds.Add(moodId);
+            }
+        }
+        else
+        {
+            SelectedMoodFilterIds.Remove(moodId);
+        }
+    }
+
+    private void ToggleTagFilter(int tagId, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!SelectedTagFilterIds.Contains(tagId))
+            {
+                SelectedTagFilterIds.Add(tagId);
+            }
+        }
+        else
+        {
+            SelectedTagFilterIds.Remove(tagId);
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        SearchText = "";
+        StartDate = null;
+        EndDate = null;
+        SelectedMoodFilterIds.Clear();
+        SelectedTagFilterIds.Clear();
+        CurrentPage = 1; // Reset to first page when clearing filters
+        await ApplyFilters();
+    }
+
+    private void CreateNewEntry()
+    {
+        Nav.NavigateTo("/journal");
+    }
+
+    private void GoToCalendar()
+    {
+        Nav.NavigateTo("/calendar");
+    }
+
+    private void GoToDashboard()
+    {
+        Nav.NavigateTo("/dashboard");
+    }
+
+    private void GoToExport()
+    {
+        Nav.NavigateTo("/export");
+    }
+
+    private void EditEntry(int entryId)
+    {
+        Nav.NavigateTo($"/journal?id={entryId}");
+    }
+
+    private async Task DeleteEntry(int entryId)
+    {
+        var entry = AllEntries.FirstOrDefault(e => e.EntryId == entryId);
+        if (entry == null) return;
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete the entry '{entry.Title}' from {entry.EntryDate:yyyy-MM-dd}? This action cannot be undone.");
+
+        if (!confirmed) return;
+
+        try
+        {
+            var deleted = await JournalService.DeleteEntryAsync(entryId);
+            if (deleted)
+            {
+                // Reload data (this will recalculate streaks automatically)
+                await LoadDataAsync();
+                // After deletion, if current page is empty, go to previous page
+                if (CurrentPage > 1 && !PaginatedEntries.Any())
+                {
+                    CurrentPage--;
+                    await LoadEntryMetadataAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error deleting entry: {ex.Message}");
+        }
+    }
+
+}

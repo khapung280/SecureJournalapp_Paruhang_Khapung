@@ -1,0 +1,203 @@
+﻿@page "/"
+
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject AuthDbService Db
+@inject AuthStateService AuthState
+@inject JournalDbService JournalService
+@inject StreakService StreakService
+@inject NavigationManager Nav
+
+<div class="card home-card">
+    <h1>Secure Journal</h1>
+    <p>Your private, encrypted journal.</p>
+
+    <!-- Streak Tracking Section -->
+    @if (AllEntries.Any())
+    {
+        <div class="streak-section">
+            <h3>Your Journaling Streaks</h3>
+            <div class="streak-stats">
+                <div class="streak-card current-streak">
+                    <div class="streak-icon"></div>
+                    <div class="streak-info">
+                        <div class="streak-label">Current Streak</div>
+                        <div class="streak-value">@CurrentStreak @(CurrentStreak == 1 ? "day" : "days")</div>
+                    </div>
+                </div>
+
+                <div class="streak-card longest-streak">
+                    <div class="streak-icon"></div>
+                    <div class="streak-info">
+                        <div class="streak-label">Longest Streak</div>
+                        <div class="streak-value">@LongestStreak @(LongestStreak == 1 ? "day" : "days")</div>
+                    </div>
+                </div>
+
+                <div class="streak-card missed-days">
+                    <div class="streak-icon"></div>
+                    <div class="streak-info">
+                        <div class="streak-label">Missed Days</div>
+                        <div class="streak-value">@MissedDays @(MissedDays == 1 ? "day" : "days")</div>
+                    </div>
+                </div>
+            </div>
+            
+            @if (MissedDays > 0)
+            {
+                <div class="streak-hint">
+                    <small>Keep your streak alive by writing every day!</small>
+                </div>
+            }
+        </div>
+    }
+
+    <div class="home-actions">
+        <button class="btn primary" @onclick="GoToJournal">New Entry</button>
+        <button class="btn secondary" @onclick="GoToEntries">View Entries</button>
+        <button class="btn secondary" @onclick="GoToDashboard">Dashboard</button>
+    </div>
+</div>
+
+<style>
+    .streak-section {
+        margin: 24px 0;
+        padding: 20px;
+        background: rgba(99, 102, 241, 0.05);
+        border-radius: 12px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    .layout.dark .streak-section {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .streak-section h3 {
+        margin: 0 0 16px 0;
+        font-size: 1.2rem;
+        color: #6366f1;
+    }
+
+    .streak-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .streak-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
+
+    .layout.dark .streak-card {
+        background: #1e1e1e;
+        box-shadow: 0 2px 4px rgba(255, 255, 255, 0.05);
+    }
+
+    .streak-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .streak-icon {
+        display: none;
+    }
+
+    .streak-info {
+        width: 100%;
+    }
+
+    .streak-label {
+        font-size: 0.85rem;
+        opacity: 0.7;
+        margin-bottom: 4px;
+        font-weight: 500;
+    }
+
+    .streak-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #6366f1;
+    }
+
+    .streak-card.current-streak .streak-value {
+        color: #f59e0b;
+    }
+
+    .streak-card.longest-streak .streak-value {
+        color: #10b981;
+    }
+
+    .streak-card.missed-days .streak-value {
+        color: #ef4444;
+    }
+
+    .streak-hint {
+        text-align: center;
+        padding-top: 12px;
+        border-top: 1px solid rgba(99, 102, 241, 0.2);
+        opacity: 0.8;
+    }
+
+    @@media (max-width: 768px) {
+        .streak-stats {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+    }
+</style>
+
+@code {
+    private List<JournalEntry> AllEntries { get; set; } = new();
+    private int CurrentStreak { get; set; }
+    private int LongestStreak { get; set; }
+    private int MissedDays { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = await Db.GetUserAsync();
+
+        // Force PIN setup if not exists
+        if (user == null)
+        {
+            Nav.NavigateTo("/setup", replace: true);
+            return;
+        }
+
+        // Check if app is unlocked - if not, redirect to login
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        // Load entries and calculate streak statistics
+        await LoadStreakDataAsync();
+    }
+
+    /// <summary>
+    /// STREAK UPDATE LOGIC:
+    /// Loads all journal entries and calculates current streak, longest streak, and missed days.
+    /// This method should be called when entries are created or deleted to update streak stats.
+    /// </summary>
+    private async Task LoadStreakDataAsync()
+    {
+        AllEntries = await JournalService.GetAllEntriesAsync();
+        CurrentStreak = StreakService.CalculateCurrentStreak(AllEntries);
+        LongestStreak = StreakService.CalculateLongestStreak(AllEntries);
+        MissedDays = StreakService.CalculateMissedDays(AllEntries);
+    }
+
+    void GoToJournal() => Nav.NavigateTo("/journal");
+    void GoToEntries() => Nav.NavigateTo("/entries");
+    void GoToDashboard() => Nav.NavigateTo("/dashboard");
+}

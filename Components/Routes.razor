@@ -1,0 +1,32 @@
+﻿<ErrorBoundary @ref="errorBoundary">
+    <ChildContent>
+        <Router AppAssembly="@typeof(App).Assembly">
+            <Found Context="routeData">
+                <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+            </Found>
+            <NotFound>
+                <LayoutView Layout="@typeof(MainLayout)">
+                    <p>Not Found</p>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </ChildContent>
+    <ErrorContent Context="error">
+        <LayoutView Layout="@typeof(MainLayout)">
+            <div style="padding: 20px; text-align: center;">
+                <h2>Something went wrong</h2>
+                <p>An error occurred while loading the page.</p>
+                <button class="btn primary" @onclick="Recover">Try Again</button>
+            </div>
+        </LayoutView>
+    </ErrorContent>
+</ErrorBoundary>
+
+@code {
+    private ErrorBoundary? errorBoundary;
+
+    private void Recover()
+    {
+        errorBoundary?.Recover();
+    }
+}

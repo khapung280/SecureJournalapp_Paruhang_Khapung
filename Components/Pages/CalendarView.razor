@@ -1,0 +1,609 @@
+@page "/calendar"
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject JournalDbService JournalService
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<div class="calendar-container">
+    <!-- Back Navigation Button -->
+    <div class="calendar-back-nav">
+        <button class="btn-back" @onclick="GoBackToEntries">← Back to Entries</button>
+    </div>
+
+    <!-- Calendar Header with Month/Year and Navigation -->
+    <div class="calendar-header">
+        <h2>Calendar Navigation</h2>
+        <div class="calendar-navigation">
+            <button class="btn secondary" @onclick="PreviousMonth" title="Previous Month">◀</button>
+            <div class="calendar-month-year">
+                <span class="month-year-text">@CurrentMonthYear</span>
+            </div>
+            <button class="btn secondary" @onclick="NextMonth" title="Next Month">▶</button>
+        </div>
+    </div>
+
+    <!-- Calendar Grid: 7 columns (Sunday-Saturday) with multiple rows for weeks -->
+    <div class="calendar-grid">
+        <!-- Day Headers: Sunday through Saturday -->
+        <div class="calendar-weekdays">
+            @foreach (var dayName in DayNames)
+            {
+                <div class="calendar-weekday">@dayName</div>
+            }
+        </div>
+
+        <!-- Calendar Days: Dynamically generated weeks with dates -->
+        <div class="calendar-days">
+            @foreach (var week in CalendarWeeks)
+            {
+                @foreach (var day in week)
+                {
+                    <div class="calendar-day @GetDayClass(day)" @onclick="() => OnDateClick(day)">
+                        @if (day.HasValue)
+                        {
+                            <span class="day-number">@day.Value.Day</span>
+                            @* Entry Indicator: Show green dot if this date has a journal entry *@
+                            @if (day.Value.Date <= DateTime.Today.Date && HasEntry(day.Value))
+                            {
+                                <span class="entry-indicator">●</span>
+                            }
+                        }
+                    </div>
+                }
+            }
+        </div>
+    </div>
+</div>
+
+<!-- Message Modal: Shows when clicking a date without an entry or future date -->
+@if (ShowMessage)
+{
+    <div class="message-overlay" @onclick="CloseMessage"></div>
+    <div class="message-container">
+        <h3>@MessageTitle</h3>
+        <p>@MessageText</p>
+        <button class="btn primary" @onclick="CloseMessage">OK</button>
+    </div>
+}
+
+<style>
+    /* Calendar Container: Centered, max-width for readability */
+    .calendar-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    /* Back Navigation: Link-style button above calendar */
+    .calendar-back-nav {
+        margin-bottom: 16px;
+    }
+
+    .btn-back {
+        background: transparent;
+        border: none;
+        color: #6366f1;
+        font-size: 0.95rem;
+        cursor: pointer;
+        padding: 8px 0;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-back:hover {
+        color: #4f46e5;
+        text-decoration: underline;
+        transform: translateX(-2px);
+    }
+
+    .layout.dark .btn-back {
+        color: #818cf8;
+    }
+
+    .layout.dark .btn-back:hover {
+        color: #a5b4fc;
+    }
+
+    /* Calendar Header: Month/Year display and navigation buttons */
+    .calendar-header {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 24px;
+        gap: 16px;
+    }
+
+    .calendar-header h2 {
+        margin: 0;
+        font-size: 1.8rem;
+    }
+
+    .calendar-navigation {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .calendar-month-year {
+        min-width: 200px;
+        text-align: center;
+    }
+
+    .month-year-text {
+        font-size: 1.3rem;
+        font-weight: 600;
+    }
+
+    /* Calendar Grid: Card container for the calendar */
+    .calendar-grid {
+        background: var(--card-bg, #ffffff);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        padding: 20px;
+        overflow: hidden;
+    }
+
+    .layout.dark .calendar-grid {
+        background: #1e1e1e;
+    }
+
+    /* Weekday Headers: 7 columns (Sunday-Saturday) */
+    .calendar-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+        margin-bottom: 8px;
+    }
+
+    .calendar-weekday {
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+        padding: 12px 4px;
+        color: #6366f1;
+        opacity: 0.8;
+    }
+
+    /* Calendar Days Grid: 7 columns, multiple rows (6 weeks max) */
+    .calendar-days {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+    }
+
+    /* Individual Day Cell: Square cells with hover effects */
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: transparent;
+        position: relative;
+    }
+
+    .calendar-day:hover:not(.other-month):not(.future-date) {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: #6366f1;
+        transform: scale(1.05);
+    }
+
+    /* Other Month Dates: Dimmed for dates from previous/next month */
+    .calendar-day.other-month {
+        opacity: 0.3;
+        cursor: default;
+    }
+
+    .calendar-day.other-month:hover {
+        transform: none;
+        background: transparent;
+        border-color: transparent;
+    }
+
+    /* Today's Date: Highlighted with gradient background */
+    .calendar-day.today {
+        background: linear-gradient(135deg, #6366f1, #8b84ff);
+        color: white;
+        font-weight: 700;
+        border-color: #6366f1;
+        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    }
+
+    .calendar-day.today:hover {
+        background: linear-gradient(135deg, #4f46e5, #6366f1);
+        transform: scale(1.05);
+    }
+
+    .day-number {
+        font-size: 1rem;
+    }
+
+    .calendar-day.today .day-number {
+        color: white;
+    }
+
+    /* Dates with Entries: Green border and light background */
+    .calendar-day.has-entry {
+        border: 2px solid #10b981;
+        background: rgba(16, 185, 129, 0.1);
+    }
+
+    .calendar-day.has-entry.today {
+        background: linear-gradient(135deg, #6366f1, #8b84ff);
+        border-color: #6366f1;
+    }
+
+    .calendar-day.has-entry:not(.today):hover {
+        background: rgba(16, 185, 129, 0.2);
+        border-color: #10b981;
+    }
+
+    /* Entry Indicator: Green dot showing date has an entry */
+    .entry-indicator {
+        position: absolute;
+        bottom: 4px;
+        right: 4px;
+        font-size: 8px;
+        color: #10b981;
+    }
+
+    .calendar-day.today .entry-indicator {
+        color: white;
+    }
+
+    .calendar-day.has-entry .entry-indicator {
+        color: #10b981;
+    }
+
+    /* Future Dates: Disabled and dimmed (read-only) */
+    .calendar-day.future-date {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .calendar-day.future-date:hover {
+        transform: none;
+        background: transparent;
+        border-color: transparent;
+    }
+
+    /* Message Modal: For showing "No entry" or validation messages */
+    .message-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+    }
+
+    .message-container {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: var(--card-bg, #ffffff);
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+        max-width: 300px;
+        text-align: center;
+    }
+
+    .layout.dark .message-container {
+        background: #1e1e1e;
+    }
+
+    .message-container h3 {
+        margin: 0 0 12px 0;
+    }
+
+    .message-container button {
+        margin-top: 16px;
+    }
+
+    /* Responsive Design: Mobile-friendly adjustments */
+    @@media (max-width: 768px) {
+        .calendar-container {
+            padding: 12px;
+        }
+
+        .calendar-grid {
+            padding: 12px;
+        }
+
+        .calendar-weekday {
+            font-size: 0.8rem;
+            padding: 8px 2px;
+        }
+
+        .day-number {
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
+@code {
+    // ========== PROPERTIES ==========
+    
+    /// <summary>
+    /// Current date being displayed (used for month/year calculation)
+    /// </summary>
+    private DateTime CurrentDate { get; set; } = DateTime.Today;
+
+    /// <summary>
+    /// Day names for calendar headers (Sunday-Saturday)
+    /// </summary>
+    private readonly string[] DayNames = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+    /// <summary>
+    /// Set of dates that have journal entries (for quick lookup)
+    /// </summary>
+    private HashSet<DateTime> EntryDates { get; set; } = new();
+
+    /// <summary>
+    /// Modal message state
+    /// </summary>
+    private bool ShowMessage { get; set; }
+    private string MessageTitle { get; set; } = "";
+    private string MessageText { get; set; } = "";
+
+    // ========== COMPUTED PROPERTIES ==========
+
+    /// <summary>
+    /// Formatted month and year string (e.g., "January 2026")
+    /// </summary>
+    private string CurrentMonthYear => CurrentDate.ToString("MMMM yyyy");
+
+    /// <summary>
+    /// CALENDAR LOADING LOGIC:
+    /// Generates a list of weeks, where each week contains 7 days (DateTime?).
+    /// Calculates the starting weekday of the month and fills in days from previous/next month as needed.
+    /// Always generates 6 weeks (42 days) to ensure full month coverage.
+    /// </summary>
+    private List<List<DateTime?>> CalendarWeeks
+    {
+        get
+        {
+            var weeks = new List<List<DateTime?>>();
+            // Get the first day of the displayed month
+            var firstDayOfMonth = new DateTime(CurrentDate.Year, CurrentDate.Month, 1);
+            
+            // Get the starting weekday (0 = Sunday, 6 = Saturday)
+            // This determines how many days from the previous month to show
+            var startDayOfWeek = (int)firstDayOfMonth.DayOfWeek;
+            
+            // Calculate the first date to display (may be from previous month)
+            // We go back by startDayOfWeek days to align with Sunday
+            var currentDate = firstDayOfMonth.AddDays(-startDayOfWeek);
+            
+            // Generate exactly 6 weeks (42 days) to cover the month plus adjacent days
+            for (int week = 0; week < 6; week++)
+            {
+                var weekDays = new List<DateTime?>();
+                for (int day = 0; day < 7; day++)
+                {
+                    weekDays.Add(currentDate);
+                    currentDate = currentDate.AddDays(1);
+                }
+                weeks.Add(weekDays);
+            }
+            
+            return weeks;
+        }
+    }
+
+    // ========== LIFECYCLE METHODS ==========
+
+    /// <summary>
+    /// Initialize calendar: Check authentication and load journal entry dates
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        // Authentication check: Redirect to login if app is locked
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        await LoadEntryDatesAsync();
+    }
+
+    // ========== DATA LOADING ==========
+
+    /// <summary>
+    /// ENTRY HIGHLIGHTING LOGIC:
+    /// Loads all journal entries from the database and creates a HashSet of dates that have entries.
+    /// This HashSet is used for O(1) lookup when checking if a date has an entry.
+    /// Loads entries for the visible month plus adjacent days (previous/next month dates shown in calendar).
+    /// </summary>
+    private async Task LoadEntryDatesAsync()
+    {
+        try
+        {
+            // Calculate the date range for the visible calendar (6 weeks = 42 days)
+            var firstDayOfMonth = new DateTime(CurrentDate.Year, CurrentDate.Month, 1);
+            var startDayOfWeek = (int)firstDayOfMonth.DayOfWeek;
+            var startDate = firstDayOfMonth.AddDays(-startDayOfWeek); // First visible date
+            var endDate = startDate.AddDays(41); // Last visible date (42 days total)
+
+            // Fetch all entries from database
+            var allEntries = await JournalService.GetAllEntriesAsync();
+            
+            // Filter entries for the visible date range and create a HashSet of dates
+            // HashSet provides O(1) lookup performance for checking if a date has an entry
+            EntryDates = allEntries
+                .Where(e => e.EntryDate.Date >= startDate.Date && e.EntryDate.Date <= endDate.Date)
+                .Select(e => e.EntryDate.Date)
+                .ToHashSet();
+        }
+        catch
+        {
+            // If loading fails, use empty set (calendar will still work, just no entry highlighting)
+            EntryDates = new HashSet<DateTime>();
+        }
+    }
+
+    // ========== HELPER METHODS ==========
+
+    /// <summary>
+    /// Check if a specific date has a journal entry
+    /// </summary>
+    private bool HasEntry(DateTime date)
+    {
+        return EntryDates.Contains(date.Date);
+    }
+
+    /// <summary>
+    /// Get CSS classes for a calendar day based on its state:
+    /// - "today": Current date
+    /// - "other-month": Date from previous/next month
+    /// - "has-entry": Date has a journal entry
+    /// - "future-date": Date is in the future (disabled)
+    /// </summary>
+    private string GetDayClass(DateTime? day)
+    {
+        if (!day.HasValue)
+            return "other-month";
+        
+        var classes = new List<string>();
+        
+        // Check if it's a future date (should be disabled)
+        if (day.Value.Date > DateTime.Today.Date)
+        {
+            classes.Add("future-date");
+        }
+        
+        // Check if it's today's date
+        if (day.Value.Date == DateTime.Today.Date)
+        {
+            classes.Add("today");
+        }
+        
+        // Check if it's from a different month (shown for context)
+        if (day.Value.Month != CurrentDate.Month)
+        {
+            classes.Add("other-month");
+        }
+        
+        // Check if it has an entry (only for past/current dates)
+        if (day.Value.Date <= DateTime.Today.Date && HasEntry(day.Value))
+        {
+            classes.Add("has-entry");
+        }
+        
+        return string.Join(" ", classes);
+    }
+
+    // ========== NAVIGATION METHODS ==========
+
+    /// <summary>
+    /// MONTH NAVIGATION LOGIC:
+    /// Navigates to the previous month. Automatically handles year transitions
+    /// (e.g., January → December of previous year). Reloads entry dates for the new month.
+    /// </summary>
+    private async Task PreviousMonth()
+    {
+        // AddMonths(-1) automatically handles year transitions
+        // Example: January 2026 → December 2025
+        CurrentDate = CurrentDate.AddMonths(-1);
+        await LoadEntryDatesAsync();
+    }
+
+    /// <summary>
+    /// MONTH NAVIGATION LOGIC:
+    /// Navigates to the next month. Automatically handles year transitions
+    /// (e.g., December → January of next year). Reloads entry dates for the new month.
+    /// </summary>
+    private async Task NextMonth()
+    {
+        // AddMonths(1) automatically handles year transitions
+        // Example: December 2025 → January 2026
+        CurrentDate = CurrentDate.AddMonths(1);
+        await LoadEntryDatesAsync();
+    }
+
+    /// <summary>
+    /// Navigate back to the journal entries list page
+    /// </summary>
+    private void GoBackToEntries()
+    {
+        Nav.NavigateTo("/entries");
+    }
+
+    // ========== DATE INTERACTION ==========
+
+    /// <summary>
+    /// DATE CLICK BEHAVIOR:
+    /// Handles clicking on a calendar date:
+    /// 1. If date is from a different month → ignore
+    /// 2. If date is in the future → show validation message
+    /// 3. If date has an entry → navigate to that journal entry
+    /// 4. If date has no entry → show "No entry for this date" message
+    /// 
+    /// This is READ-ONLY navigation - does NOT create new entries.
+    /// </summary>
+    private async Task OnDateClick(DateTime? day)
+    {
+        // Ignore clicks on dates from other months
+        if (!day.HasValue || day.Value.Month != CurrentDate.Month)
+            return;
+
+        // VALIDATION: Prevent navigation to future dates
+        if (day.Value.Date > DateTime.Today.Date)
+        {
+            MessageTitle = "Invalid Date";
+            MessageText = "Cannot navigate to future dates.";
+            ShowMessage = true;
+            return;
+        }
+
+        try
+        {
+            // Check if an entry exists for this date
+            var entry = await JournalService.GetEntryByDateAsync(day.Value.Date);
+            
+            if (entry != null)
+            {
+                // ENTRY EXISTS: Navigate to the journal entry view page
+                // Uses the entry ID to load the specific entry
+                Nav.NavigateTo($"/journal?id={entry.EntryId}");
+            }
+            else
+            {
+                // NO ENTRY: Show informative message
+                MessageTitle = "No Entry";
+                MessageText = $"No entry for {day.Value:MMMM dd, yyyy}";
+                ShowMessage = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            // Error handling: Show error message if something goes wrong
+            MessageTitle = "Error";
+            MessageText = $"Unable to check entry: {ex.Message}";
+            ShowMessage = true;
+        }
+    }
+
+    /// <summary>
+    /// Close the message modal
+    /// </summary>
+    private void CloseMessage()
+    {
+        ShowMessage = false;
+        MessageTitle = "";
+        MessageText = "";
+    }
+}

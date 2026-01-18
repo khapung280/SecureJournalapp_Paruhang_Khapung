@@ -1,0 +1,716 @@
+@page "/dashboard"
+@using SecureJournalapp_Paruhang_Khapung.Models
+@using SecureJournalapp_Paruhang_Khapung.Services
+@inject JournalDbService JournalService
+@inject AuthStateService AuthState
+@inject NavigationManager Nav
+
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Dashboard Analytics & Insights</h1>
+        <div class="header-actions">
+            <button class="btn secondary" @onclick="GoToExport">Export</button>
+            <button class="btn secondary" @onclick="GoToEntries">← Back to Entries</button>
+        </div>
+    </div>
+
+    @if (AllEntries.Any())
+    {
+        <!-- Mood Analytics Section -->
+        <div class="analytics-card">
+            <h2>Mood Analytics</h2>
+            
+            <!-- Mood Distribution by Category -->
+            <div class="analytics-subsection">
+                <h3>Mood Distribution</h3>
+                <div class="mood-distribution">
+                    <div class="mood-category positive">
+                        <div class="category-label">Positive</div>
+                        <div class="category-value">@PositiveMoodCount entry(ies)</div>
+                        <div class="category-percentage">@GetPercentage(PositiveMoodCount, TotalEntries)%</div>
+                    </div>
+                    <div class="mood-category neutral">
+                        <div class="category-label">Neutral</div>
+                        <div class="category-value">@NeutralMoodCount entry(ies)</div>
+                        <div class="category-percentage">@GetPercentage(NeutralMoodCount, TotalEntries)%</div>
+                    </div>
+                    <div class="mood-category negative">
+                        <div class="category-label">Negative</div>
+                        <div class="category-value">@NegativeMoodCount entry(ies)</div>
+                        <div class="category-percentage">@GetPercentage(NegativeMoodCount, TotalEntries)%</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Most Frequent Moods -->
+            <div class="analytics-subsection">
+                <h3>Most Frequent Primary Moods</h3>
+                @if (MostFrequentMoods.Any())
+                {
+                    <div class="frequent-moods-list">
+                        @foreach (var moodStat in MostFrequentMoods)
+                        {
+                            <div class="frequent-mood-item">
+                                <span class="mood-badge @moodStat.Mood.Category.ToLower()">@moodStat.Mood.Name</span>
+                                <span class="mood-count">@moodStat.Count @(moodStat.Count == 1 ? "time" : "times")</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="no-data-hint">No mood data available.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Tag Analytics Section -->
+        <div class="analytics-card">
+            <h2>Tag Analytics</h2>
+            <div class="analytics-subsection">
+                <h3>Tag Usage Breakdown</h3>
+                @if (TagUsageStats.Any())
+                {
+                    <div class="tag-breakdown">
+                        @foreach (var tagStat in TagUsageStats.OrderByDescending(t => t.Count).Take(10))
+                        {
+                            <div class="tag-stat-item">
+                                <span class="tag-badge @(tagStat.Tag.IsPreBuilt ? "prebuilt" : "custom")">@tagStat.Tag.Name</span>
+                                <div class="tag-stat-bar">
+                                    <div class="tag-stat-fill" style="width: @GetTagPercentage(tagStat.Count)%"></div>
+                                </div>
+                                <span class="tag-stat-count">@tagStat.Count @(tagStat.Count == 1 ? "entry" : "entries") (@GetTagPercentage(tagStat.Count)%)</span>
+                            </div>
+                        }
+                    </div>
+                    @if (TagUsageStats.Count > 10)
+                    {
+                        <small class="hint-text">Showing top 10 tags (out of @TagUsageStats.Count total tags)</small>
+                    }
+                }
+                else
+                {
+                    <p class="no-data-hint">No tags have been used yet.</p>
+                }
+            </div>
+        </div>
+
+        <!-- Writing Analytics Section -->
+        <div class="analytics-card">
+            <h2>Writing Analytics</h2>
+            <div class="analytics-subsection">
+                <h3>Word Count Statistics</h3>
+                <div class="word-count-stats">
+                    <div class="stat-box">
+                        <div class="stat-label">Total Words</div>
+                        <div class="stat-value">@TotalWordCount.ToString("N0")</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Average per Entry</div>
+                        <div class="stat-value">@AverageWordsPerEntry.ToString("N0")</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-label">Total Entries</div>
+                        <div class="stat-value">@TotalEntries</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Word Count Trend Over Time -->
+            <div class="analytics-subsection">
+                <h3>Word Count Trend (Last 10 Entries)</h3>
+                @if (WordCountTrend.Any())
+                {
+                    <div class="word-trend-list">
+                        @foreach (var trendItem in WordCountTrend.Take(10))
+                        {
+                            <div class="trend-item">
+                                <div class="trend-date">@trendItem.Date.ToString("yyyy-MM-dd")</div>
+                                <div class="trend-bar-container">
+                                    <div class="trend-bar" style="width: @GetTrendPercentage(trendItem.WordCount)%"></div>
+                                </div>
+                                <div class="trend-value">@trendItem.WordCount words</div>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="no-data-hint">No word count data available.</p>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="empty-state">
+            <h2>No Data Available Yet</h2>
+            <p>Start journaling to see your analytics and insights!</p>
+            <button class="btn primary" @onclick="GoToJournal">Create Your First Entry</button>
+        </div>
+    }
+</div>
+
+<style>
+    .dashboard-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .dashboard-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        color: #6366f1;
+    }
+
+    .layout.dark .dashboard-header h1 {
+        color: #818cf8;
+    }
+
+    .dashboard-header .header-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .analytics-card {
+        background: var(--card-bg, #ffffff);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .layout.dark .analytics-card {
+        background: #1e1e1e;
+        box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
+    }
+
+    .analytics-card h2 {
+        margin: 0 0 20px 0;
+        font-size: 1.5rem;
+        color: #6366f1;
+        border-bottom: 2px solid rgba(99, 102, 241, 0.2);
+        padding-bottom: 12px;
+    }
+
+    .layout.dark .analytics-card h2 {
+        color: #818cf8;
+        border-bottom-color: rgba(129, 140, 248, 0.3);
+    }
+
+    .analytics-subsection {
+        margin-bottom: 32px;
+    }
+
+    .analytics-subsection:last-child {
+        margin-bottom: 0;
+    }
+
+    .analytics-subsection h3 {
+        margin: 0 0 16px 0;
+        font-size: 1.2rem;
+        opacity: 0.9;
+    }
+
+    /* Mood Distribution */
+    .mood-distribution {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+    }
+
+    .mood-category {
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+        transition: transform 0.2s ease;
+    }
+
+    .mood-category:hover {
+        transform: translateY(-2px);
+    }
+
+    .mood-category.positive {
+        background: rgba(16, 185, 129, 0.1);
+        border: 2px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .mood-category.neutral {
+        background: rgba(156, 163, 175, 0.1);
+        border: 2px solid rgba(156, 163, 175, 0.3);
+    }
+
+    .mood-category.negative {
+        background: rgba(239, 68, 68, 0.1);
+        border: 2px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .layout.dark .mood-category.positive {
+        background: rgba(16, 185, 129, 0.2);
+        border-color: rgba(16, 185, 129, 0.4);
+    }
+
+    .layout.dark .mood-category.neutral {
+        background: rgba(156, 163, 175, 0.2);
+        border-color: rgba(156, 163, 175, 0.4);
+    }
+
+    .layout.dark .mood-category.negative {
+        background: rgba(239, 68, 68, 0.2);
+        border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .category-label {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin-bottom: 8px;
+    }
+
+    .category-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+
+    .category-percentage {
+        font-size: 0.9rem;
+        opacity: 0.7;
+    }
+
+    .mood-category.positive .category-value {
+        color: #10b981;
+    }
+
+    .mood-category.neutral .category-value {
+        color: #9ca3af;
+    }
+
+    .mood-category.negative .category-value {
+        color: #ef4444;
+    }
+
+    /* Most Frequent Moods */
+    .frequent-moods-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .frequent-mood-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: rgba(99, 102, 241, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+    }
+
+    .layout.dark .frequent-mood-item {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .mood-count {
+        font-weight: 600;
+        opacity: 0.8;
+    }
+
+    /* Tag Breakdown */
+    .tag-breakdown {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .tag-stat-item {
+        display: grid;
+        grid-template-columns: 150px 1fr auto;
+        gap: 12px;
+        align-items: center;
+    }
+
+    @@media (max-width: 768px) {
+        .tag-stat-item {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+    }
+
+    .tag-stat-bar {
+        height: 24px;
+        background: rgba(99, 102, 241, 0.1);
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .layout.dark .tag-stat-bar {
+        background: rgba(99, 102, 241, 0.2);
+    }
+
+    .tag-stat-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #818cf8);
+        transition: width 0.3s ease;
+    }
+
+    .tag-stat-count {
+        font-weight: 600;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        min-width: 100px;
+        text-align: right;
+    }
+
+    /* Word Count Stats */
+    .word-count-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .stat-box {
+        padding: 20px;
+        background: rgba(99, 102, 241, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        text-align: center;
+    }
+
+    .layout.dark .stat-box {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.7;
+        margin-bottom: 8px;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #6366f1;
+    }
+
+    .layout.dark .stat-value {
+        color: #818cf8;
+    }
+
+    /* Word Count Trend */
+    .word-trend-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .trend-item {
+        display: grid;
+        grid-template-columns: 120px 1fr auto;
+        gap: 12px;
+        align-items: center;
+    }
+
+    @@media (max-width: 768px) {
+        .trend-item {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+    }
+
+    .trend-date {
+        font-weight: 600;
+        font-size: 0.9rem;
+        opacity: 0.8;
+    }
+
+    .trend-bar-container {
+        height: 24px;
+        background: rgba(99, 102, 241, 0.1);
+        border-radius: 4px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .layout.dark .trend-bar-container {
+        background: rgba(99, 102, 241, 0.2);
+    }
+
+    .trend-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #10b981, #34d399);
+        transition: width 0.3s ease;
+    }
+
+    .trend-value {
+        font-weight: 600;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        min-width: 80px;
+        text-align: right;
+    }
+
+    .no-data-hint {
+        opacity: 0.6;
+        font-style: italic;
+        margin: 16px 0;
+    }
+
+    .hint-text {
+        display: block;
+        margin-top: 12px;
+        opacity: 0.6;
+        font-size: 0.85rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: var(--card-bg, #ffffff);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .layout.dark .empty-state {
+        background: #1e1e1e;
+        box-shadow: 0 2px 8px rgba(255, 255, 255, 0.05);
+    }
+
+    .empty-state h2 {
+        margin: 0 0 12px 0;
+        color: #6366f1;
+    }
+
+    .empty-state p {
+        margin: 0 0 24px 0;
+        opacity: 0.7;
+    }
+</style>
+
+@code {
+    private List<JournalEntry> AllEntries { get; set; } = new();
+    private Dictionary<int, (Mood? Primary, List<Mood> Secondaries)> EntryMoodsCache { get; set; } = new();
+    private Dictionary<int, List<Tag>> EntryTagsCache { get; set; } = new();
+
+    // Mood Analytics
+    private int PositiveMoodCount { get; set; }
+    private int NeutralMoodCount { get; set; }
+    private int NegativeMoodCount { get; set; }
+    private List<(Mood Mood, int Count)> MostFrequentMoods { get; set; } = new();
+
+    // Tag Analytics
+    private List<(Tag Tag, int Count)> TagUsageStats { get; set; } = new();
+
+    // Word Count Analytics
+    private int TotalWordCount { get; set; }
+    private double AverageWordsPerEntry { get; set; }
+    private List<(DateTime Date, int WordCount)> WordCountTrend { get; set; } = new();
+
+    private int TotalEntries => AllEntries.Count;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if app is unlocked - redirect to login if not
+        if (!AuthState.IsUnlocked)
+        {
+            Nav.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        await LoadDashboardDataAsync();
+    }
+
+    /// <summary>
+    /// DASHBOARD DATA LOADING:
+    /// Loads all journal entries and their associated moods and tags, then calculates all analytics.
+    /// This method should be called when the dashboard page loads or when entries are created/deleted.
+    /// </summary>
+    private async Task LoadDashboardDataAsync()
+    {
+        // Load all entries
+        AllEntries = await JournalService.GetAllEntriesAsync();
+
+        if (!AllEntries.Any())
+            return;
+
+        // Load moods and tags for all entries
+        EntryMoodsCache.Clear();
+        EntryTagsCache.Clear();
+
+        foreach (var entry in AllEntries)
+        {
+            var moods = await JournalService.GetEntryMoodsAsync(entry.EntryId);
+            EntryMoodsCache[entry.EntryId] = moods;
+
+            var tags = await JournalService.GetEntryTagsAsync(entry.EntryId);
+            EntryTagsCache[entry.EntryId] = tags;
+        }
+
+        // Load all moods and tags for mapping
+        var allMoods = await JournalService.GetAllMoodsAsync();
+        var allTags = await JournalService.GetAllTagsAsync();
+
+        // Calculate all analytics
+        CalculateMoodAnalytics(allMoods);
+        CalculateTagAnalytics(allTags);
+        CalculateWordCountAnalytics();
+    }
+
+    /// <summary>
+    /// MOOD DISTRIBUTION CALCULATION:
+    /// Counts entries by primary mood category (Positive, Neutral, Negative).
+    /// Algorithm:
+    /// 1. For each entry, get its primary mood
+    /// 2. Count entries by mood category
+    /// 3. Store counts for Positive, Neutral, and Negative categories
+    /// </summary>
+    private void CalculateMoodAnalytics(List<Mood> allMoods)
+    {
+        PositiveMoodCount = 0;
+        NeutralMoodCount = 0;
+        NegativeMoodCount = 0;
+        var moodFrequency = new Dictionary<int, int>();
+
+        foreach (var entry in AllEntries)
+        {
+            if (EntryMoodsCache.TryGetValue(entry.EntryId, out var moods))
+            {
+                var primaryMood = moods.Primary;
+                if (primaryMood != null)
+                {
+                    // Count by category
+                    switch (primaryMood.Category.ToLower())
+                    {
+                        case "positive":
+                            PositiveMoodCount++;
+                            break;
+                        case "neutral":
+                            NeutralMoodCount++;
+                            break;
+                        case "negative":
+                            NegativeMoodCount++;
+                            break;
+                    }
+
+                    // Count frequency for most frequent moods
+                    if (!moodFrequency.ContainsKey(primaryMood.MoodId))
+                        moodFrequency[primaryMood.MoodId] = 0;
+                    moodFrequency[primaryMood.MoodId]++;
+                }
+            }
+        }
+
+        // Build most frequent moods list using provided allMoods list
+        MostFrequentMoods = moodFrequency
+            .Select(kvp => (allMoods.FirstOrDefault(m => m.MoodId == kvp.Key), kvp.Value))
+            .Where(x => x.Item1 != null)
+            .Select(x => (x.Item1!, x.Value))
+            .OrderByDescending(x => x.Value)
+            .ThenBy(x => x.Item1.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// TAG USAGE CALCULATION:
+    /// Counts how many times each tag is used across all entries.
+    /// Algorithm:
+    /// 1. For each entry, get all its tags
+    /// 2. Count how many entries use each tag
+    /// 3. Store tag usage statistics (tag name, usage count)
+    /// </summary>
+    private void CalculateTagAnalytics(List<Tag> allTags)
+    {
+        var tagUsage = new Dictionary<int, int>();
+
+        foreach (var entry in AllEntries)
+        {
+            if (EntryTagsCache.TryGetValue(entry.EntryId, out var tags))
+            {
+                foreach (var tag in tags)
+                {
+                    if (!tagUsage.ContainsKey(tag.TagId))
+                        tagUsage[tag.TagId] = 0;
+                    tagUsage[tag.TagId]++;
+                }
+            }
+        }
+
+        // Build tag usage statistics using provided allTags list
+        TagUsageStats = tagUsage
+            .Select(kvp => (allTags.FirstOrDefault(t => t.TagId == kvp.Key), kvp.Value))
+            .Where(x => x.Item1 != null)
+            .Select(x => (x.Item1!, x.Value))
+            .OrderByDescending(x => x.Value)
+            .ThenBy(x => x.Item1.Name)
+            .ToList();
+    }
+
+    /// <summary>
+    /// WORD COUNT CALCULATION:
+    /// Calculates word count statistics from entry Content field.
+    /// Algorithm:
+    /// 1. Split content by whitespace (spaces, newlines, tabs)
+    /// 2. Count non-empty words
+    /// 3. Calculate total words, average words per entry
+    /// 4. Build trend data (word count per entry over time)
+    /// 
+    /// Example: "Hello world" = 2 words, "I am   happy\nToday" = 4 words
+    /// </summary>
+    private void CalculateWordCountAnalytics()
+    {
+        TotalWordCount = 0;
+        WordCountTrend.Clear();
+
+        foreach (var entry in AllEntries.OrderBy(e => e.EntryDate))
+        {
+            // WORD COUNT LOGIC: Split content by whitespace and count non-empty words
+            var words = entry.Content
+                .Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(w => !string.IsNullOrWhiteSpace(w))
+                .Count();
+
+            TotalWordCount += words;
+            WordCountTrend.Add((entry.EntryDate, words));
+        }
+
+        AverageWordsPerEntry = AllEntries.Any() ? (double)TotalWordCount / AllEntries.Count : 0;
+    }
+
+    private double GetPercentage(int value, int total)
+    {
+        if (total == 0) return 0;
+        return Math.Round((double)value / total * 100, 1);
+    }
+
+    private double GetTagPercentage(int count)
+    {
+        if (!AllEntries.Any()) return 0;
+        return Math.Round((double)count / AllEntries.Count * 100, 1);
+    }
+
+    private double GetTrendPercentage(int wordCount)
+    {
+        if (!WordCountTrend.Any()) return 0;
+        var maxWords = WordCountTrend.Max(t => t.WordCount);
+        if (maxWords == 0) return 0;
+        return Math.Min((double)wordCount / maxWords * 100, 100);
+    }
+
+    private void GoToEntries() => Nav.NavigateTo("/entries");
+    private void GoToJournal() => Nav.NavigateTo("/journal");
+    private void GoToExport() => Nav.NavigateTo("/export");
+}
